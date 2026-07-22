@@ -1,0 +1,50 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Dark Vantablack Background -->
+    <path
+        android:fillColor="#050505"
+        android:pathData="M0,0h108v108h-108z" />
+
+    <!-- Subtle Glow Circle -->
+    <path
+        android:fillColor="#1506B6D4"
+        android:pathData="M54,54m-38,0a38,38 0 1,1 76,0a38,38 0 1,1 -76,0" />
+
+    <!-- ODU Tower Base / Scaffold -->
+    <path
+        android:strokeColor="#9CA3AF"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M42,76L54,42L66,76 M46,64h16 M49,54h10" />
+
+    <!-- Central Antenna Spire -->
+    <path
+        android:strokeColor="#06B6D4"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:pathData="M54,44V26" />
+
+    <!-- Top Spire Tip Dot -->
+    <path
+        android:fillColor="#06B6D4"
+        android:pathData="M54,24m-3,0a3,3 0 1,1 6,0a3,3 0 1,1 -6,0" />
+
+    <!-- 5G Radio Wave Arcs (Cyan / Purple) -->
+    <!-- Inner Wave Arc -->
+    <path
+        android:strokeColor="#06B6D4"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M45,30 A12,12 0 0,1 63,30" />
+
+    <!-- Outer Wave Arc -->
+    <path
+        android:strokeColor="#8B5CF6"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M38,23 A20,20 0 0,1 70,23" />
+</vector>

@@ -1,0 +1,49 @@
+# Built application files
+*.apk
+*.aar
+*.ap_
+*.aab
+
+# Files for the ART/DALVIK VM
+*.dex
+
+# Java class files
+*.class
+
+# Generated files
+bin/
+gen/
+out/
+build/
+app/build/
+.gradle/
+
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Local configuration file (sdk path, secrets, etc)
+local.properties
+
+# Log files
+*.log
+
+# Android Profiling
+*.hprof
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Project documentation & raw HAR logs (except primary README)
+192.168.254.1.md
+192.168.254.1(traffic).md
+ARCHITECTURE.md
+PRD.md
+RULES.md
+SCHEMA.md
+*.md
+!README.md
