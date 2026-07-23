@@ -1,21 +1,27 @@
 package com.example.odumonitor.worker
 
 import android.content.Context
+import androidx.glance.appwidget.updateAll
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.odumonitor.data.repository.OduRepository
+import com.example.odumonitor.widget.OduCompactWidget
+import com.example.odumonitor.widget.OduDetailedWidget
 
 class OduSyncWorker(
-    appContext: Context,
+    private val appContext: Context,
     workerParams: WorkerParameters
 ) : CoroutineWorker(appContext, workerParams) {
 
-    private val repository = OduRepository()
-
     override suspend fun doWork(): Result {
         return try {
-            val signalState = repository.fetchCurrentSignalOnce()
-            // In a production setup, notify Glance AppWidgetManager update or local alert manager if thresholds fail
+            val repository = OduRepository(appContext)
+            repository.fetchCurrentSignalOnce()
+            
+            // Trigger Glance widget redraw
+            OduCompactWidget().updateAll(appContext)
+            OduDetailedWidget().updateAll(appContext)
+            
             Result.success()
         } catch (e: Exception) {
             Result.retry()
