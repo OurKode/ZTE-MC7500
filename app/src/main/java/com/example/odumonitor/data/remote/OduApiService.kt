@@ -10,7 +10,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
-import java.net.SocketTimeoutException
+import java.io.InputStream
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
@@ -31,7 +31,12 @@ class OduApiService(
         private val netInfoPayloadRequestBody = """[{"jsonrpc":"2.0","id":1,"method":"call","params":["00000000000000000000000000000000","zte_nwinfo_api","nwinfo_get_netinfo",{}]}]""".toRequestBody(jsonMediaType)
 
         val SharedClient: OkHttpClient by lazy {
-            try {
+            val builder = OkHttpClient.Builder()
+                .connectTimeout(2, TimeUnit.SECONDS)
+                .readTimeout(3, TimeUnit.SECONDS)
+                .writeTimeout(2, TimeUnit.SECONDS)
+
+            runCatching {
                 val trustAllCerts = arrayOf<TrustManager>(
                     object : X509TrustManager {
                         override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
@@ -42,20 +47,10 @@ class OduApiService(
                 val sslContext = SSLContext.getInstance("SSL").apply {
                     init(null, trustAllCerts, SecureRandom())
                 }
-                OkHttpClient.Builder()
-                    .sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
+                builder.sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
                     .hostnameVerifier { _, _ -> true }
-                    .connectTimeout(2, TimeUnit.SECONDS)
-                    .readTimeout(3, TimeUnit.SECONDS)
-                    .writeTimeout(2, TimeUnit.SECONDS)
-                    .build()
-            } catch (e: Exception) {
-                OkHttpClient.Builder()
-                    .connectTimeout(2, TimeUnit.SECONDS)
-                    .readTimeout(3, TimeUnit.SECONDS)
-                    .writeTimeout(2, TimeUnit.SECONDS)
-                    .build()
             }
+            builder.build()
         }
     }
 
@@ -67,11 +62,10 @@ class OduApiService(
             val request = Request.Builder()
                 .url(ubusUrlWithQuery)
                 .post(netInfoPayloadRequestBody)
-                .header("Content-Type", "application/json")
                 .header("Accept", "application/json, text/javascript, */*; q=0.01")
                 .header("Origin", "http://192.168.254.1")
                 .header("Referer", "http://192.168.254.1/")
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                 .header("X-Requested-With", "XMLHttpRequest")
                 .header("Z-Mode", "0")
                 .header("Z-Tag", "nwinfo_get_netinfo")
@@ -97,7 +91,6 @@ class OduApiService(
             }
         }.recoverCatching { throwable ->
             when (throwable) {
-                is SocketTimeoutException -> throw IOException("Connection timed out (192.168.254.1 unreachable)")
                 is IOException -> throw throwable
                 else -> throw IOException("Failed to connect to ZTE ODU: ${throwable.localizedMessage}")
             }

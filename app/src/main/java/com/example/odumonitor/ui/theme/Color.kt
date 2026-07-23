@@ -19,3 +19,21 @@ val AccentPurple = Color(0xFF8B5CF6)
 val TextPrimary = Color(0xFFF9FAFB)
 val TextSecondary = Color(0xFF9CA3AF)
 val TextMuted = Color(0xFF4B5563)
+
+fun getRsrpColor(rsrp: Int): Color = when {
+    rsrp >= -80 -> SignalExcellent
+    rsrp >= -100 -> SignalFair
+    else -> SignalPoor
+}
+
+fun getSinrColor(sinr: Float): Color = when {
+    sinr >= 20f -> SignalExcellent
+    sinr >= 10f -> SignalFair
+    else -> SignalPoor
+}
+
+fun getRsrqColor(rsrq: Int): Color = when {
+    rsrq >= -10 -> SignalExcellent
+    rsrq >= -15 -> SignalFair
+    else -> SignalPoor
+}

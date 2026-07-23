@@ -10,8 +10,7 @@ import kotlinx.serialization.json.decodeFromJsonElement
 data class UbusResponse(
     @SerialName("jsonrpc") val jsonrpc: String? = null,
     @SerialName("id") val id: Int? = null,
-    @SerialName("result") val result: JsonArray? = null,
-    @SerialName("error") val error: UbusError? = null
+    @SerialName("result") val result: JsonArray? = null
 ) {
     inline fun <reified T> extractPayload(json: Json): T? {
         return try {
@@ -25,30 +24,17 @@ data class UbusResponse(
 }
 
 @Serializable
-data class UbusError(
-    @SerialName("code") val code: Int? = null,
-    @SerialName("message") val message: String? = null
-)
-
-@Serializable
 data class OduNetInfoPayload(
-    @SerialName("net_select") val netSelect: String? = null,
-    @SerialName("net_select_mode") val netSelectMode: String? = null,
     @SerialName("network_type") val networkType: String = "UNKNOWN",
     @SerialName("network_provider") val networkProvider: String? = null,
     @SerialName("network_provider_fullname") val networkProviderFullname: String? = null,
     @SerialName("signalbar") val signalBar: String? = "0",
-    @SerialName("domain_stat") val domainStat: String? = null,
-    @SerialName("simcard_roam") val simcardRoam: String? = null,
     
     // 5G Metrics
     @SerialName("nr5g_rsrp") val nr5gRsrp: Int? = null,
     @SerialName("nr5g_rsrq") val nr5gRsrq: Int? = null,
     @SerialName("nr5g_snr") val nr5gSnr: String? = null,
-    @SerialName("nr5g_rssi") val nr5gRssi: Int? = null,
     @SerialName("nr5g_action_band") val nr5gActionBand: String? = null,
-    @SerialName("nr5g_action_channel") val nr5gActionChannel: Int? = null,
-    @SerialName("nr5g_bandwidth") val nr5gBandwidth: String? = null,
     @SerialName("nr5g_pci") val nr5gPci: Int? = null,
     @SerialName("nr5g_cell_id") val nr5gCellId: Long? = null,
     
@@ -56,12 +42,9 @@ data class OduNetInfoPayload(
     @SerialName("lte_rsrp") val lteRsrp: Int? = null,
     @SerialName("lte_rsrq") val lteRsrq: Int? = null,
     @SerialName("lte_snr") val lteSnr: String? = null,
-    @SerialName("lte_rssi") val lteRssi: Int? = null,
     @SerialName("wan_active_band") val wanActiveBand: String? = null,
-    @SerialName("wan_active_channel") val wanActiveChannel: Int? = null,
     @SerialName("cell_id") val cellId: Long? = null,
     @SerialName("lte_pci") val ltePci: Int? = null,
-    @SerialName("lac_code") val lacCode: Int? = null,
     
     // CA & Neighbors
     @SerialName("lteca_state") val lteCaState: Int? = 0,
