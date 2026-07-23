@@ -1,46 +1,47 @@
 package com.example.odumonitor.data.repository
 
+import android.content.Context
+import com.example.odumonitor.data.local.HistoryRetention
+import com.example.odumonitor.data.local.OduDatabaseHelper
+import com.example.odumonitor.data.local.WidgetPreferences
 import com.example.odumonitor.data.model.OduNetInfoPayload
 import com.example.odumonitor.data.model.OduSignalState
 import com.example.odumonitor.data.remote.OduApiService
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
-import kotlin.random.Random
 
 class OduRepository(
+    private val context: Context? = null,
     private val apiService: OduApiService = OduApiService()
 ) {
-    var isDemoMode: Boolean = false
+    private val dbHelper = context?.let { OduDatabaseHelper(it) }
+    private val widgetPrefs = context?.let { WidgetPreferences(it) }
 
     fun getSignalStream(pollingIntervalMs: Long = 3000L): Flow<OduSignalState> = flow {
         while (true) {
-            if (isDemoMode) {
-                emit(generateDemoState())
+            val result = apiService.fetchNetInfo()
+            if (result.isSuccess) {
+                val payload = result.getOrNull()!!
+                val state = mapPayloadToDomain(payload)
+                saveAndPruneSignalHistory(state)
+                emit(state)
             } else {
-                val result = apiService.fetchNetInfo()
-                if (result.isSuccess) {
-                    val payload = result.getOrNull()!!
-                    emit(mapPayloadToDomain(payload))
-                } else {
-                    val errorMsg = result.exceptionOrNull()?.message ?: "Unknown Network Error"
-                    emit(
-                        OduSignalState(
-                            isConnected = false,
-                            connectionType = "Disconnected",
-                            errorMessage = errorMsg,
-                            lastUpdated = System.currentTimeMillis()
-                        )
-                    )
-                }
+                val errorMsg = result.exceptionOrNull()?.message ?: "Unknown Network Error"
+                val offlineState = OduSignalState(
+                    isConnected = false,
+                    connectionType = "Disconnected",
+                    errorMessage = errorMsg,
+                    lastUpdated = System.currentTimeMillis()
+                )
+                emit(offlineState)
             }
             kotlinx.coroutines.delay(pollingIntervalMs)
         }
     }
 
     suspend fun fetchCurrentSignalOnce(): OduSignalState {
-        if (isDemoMode) return generateDemoState()
         val result = apiService.fetchNetInfo()
-        return if (result.isSuccess) {
+        val state = if (result.isSuccess) {
             mapPayloadToDomain(result.getOrNull()!!)
         } else {
             OduSignalState(
@@ -50,6 +51,35 @@ class OduRepository(
                 lastUpdated = System.currentTimeMillis()
             )
         }
+        if (state.isConnected) {
+            saveAndPruneSignalHistory(state)
+        }
+        return state
+    }
+
+    private fun saveAndPruneSignalHistory(state: OduSignalState) {
+        dbHelper?.let { db ->
+            db.insertSignal(state)
+            val retention = widgetPrefs?.getHistoryRetention() ?: HistoryRetention.TWENTY_FOUR_HOURS
+            db.pruneOldHistory(retention)
+        }
+    }
+
+    fun getHistoryList(): List<OduSignalState> {
+        return dbHelper?.getHistory(limit = 300) ?: emptyList()
+    }
+
+    fun clearAllHistory(): Int {
+        return dbHelper?.clearAllHistory() ?: 0
+    }
+
+    fun getHistoryRetention(): HistoryRetention {
+        return widgetPrefs?.getHistoryRetention() ?: HistoryRetention.TWENTY_FOUR_HOURS
+    }
+
+    fun saveHistoryRetention(retention: HistoryRetention) {
+        widgetPrefs?.saveHistoryRetention(retention)
+        dbHelper?.pruneOldHistory(retention)
     }
 
     private fun mapPayloadToDomain(p: OduNetInfoPayload): OduSignalState {
@@ -80,38 +110,6 @@ class OduRepository(
             isCaActive = (p.lteCaState ?: 0) > 0,
             caDetails = p.lteCaString ?: "-",
             neighborCells = p.lteNeighborCell ?: "-",
-            errorMessage = null,
-            lastUpdated = System.currentTimeMillis()
-        )
-    }
-
-    private fun generateDemoState(): OduSignalState {
-        val randomRsrpOffset = Random.nextInt(-4, 4)
-        val randomSinrOffset = Random.nextFloat() * 2f - 1f
-
-        return OduSignalState(
-            isConnected = true,
-            connectionType = "ENDC (5G NSA)",
-            provider = "Telkomsel 5G Ultra",
-            signalBar = 4,
-            
-            lteRsrp = -78 + randomRsrpOffset,
-            lteRsrq = -10,
-            lteSinr = 22.4f + randomSinrOffset,
-            lteBand = "LTE Band 3 (1800MHz)",
-            ltePci = 339,
-            lteCellId = 2260613L,
-            
-            nrRsrp = -72 + randomRsrpOffset,
-            nrRsrq = -8,
-            nrSinr = 28.5f + randomSinrOffset,
-            nrBand = "n40 (2300MHz)",
-            nrPci = 104,
-            nrCellId = 884102L,
-            
-            isCaActive = true,
-            caDetails = "LTE B3 (20MHz) + LTE B1 (15MHz) + 5G n40 (100MHz)",
-            neighborCells = "PCI:339 (-80dBm); PCI:392 (-88dBm); PCI:367 (-92dBm)",
             errorMessage = null,
             lastUpdated = System.currentTimeMillis()
         )
