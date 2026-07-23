@@ -13,7 +13,7 @@ import com.example.odumonitor.ui.theme.OduMonitorTheme
 class MainActivity : ComponentActivity() {
 
     private val viewModel: DashboardViewModel by viewModels {
-        DashboardViewModel.Factory(com.example.odumonitor.data.repository.OduRepository())
+        DashboardViewModel.Factory(applicationContext)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -25,7 +25,10 @@ class MainActivity : ComponentActivity() {
                     uiState = uiState,
                     onRefresh = { viewModel.refreshImmediately() },
                     onPollingIntervalSelected = { viewModel.setPollingInterval(it) },
-                    onToggleDemoMode = { viewModel.toggleDemoMode(it) }
+                    onTabSelected = { viewModel.setActiveTab(it) },
+                    onHistoryRetentionSelected = { viewModel.setHistoryRetention(it) },
+                    onClearHistory = { viewModel.clearHistory() },
+                    onWidgetConfigChanged = { viewModel.updateWidgetConfig(it) }
                 )
             }
         }
