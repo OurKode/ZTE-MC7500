@@ -47,6 +47,8 @@ RULES.md
 SCHEMA.md
 *.md
 !README.md
+!docs/*.md
+!docs/**/*.md
 
 # Local tools & screenshots
 .codegraph/
