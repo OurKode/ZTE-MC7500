@@ -25,9 +25,6 @@ class MainActivity : ComponentActivity() {
                     uiState = uiState,
                     onRefresh = { viewModel.refreshImmediately() },
                     onPollingIntervalSelected = { viewModel.setPollingInterval(it) },
-                    onTabSelected = { viewModel.setActiveTab(it) },
-                    onHistoryRetentionSelected = { viewModel.setHistoryRetention(it) },
-                    onClearHistory = { viewModel.clearHistory() },
                     onWidgetConfigChanged = { viewModel.updateWidgetConfig(it) }
                 )
             }

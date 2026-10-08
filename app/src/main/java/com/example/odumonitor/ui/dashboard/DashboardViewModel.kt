@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.example.odumonitor.data.local.HistoryRetention
 import com.example.odumonitor.data.local.WidgetConfig
 import com.example.odumonitor.data.local.WidgetPreferences
 import com.example.odumonitor.data.model.OduSignalState
@@ -18,11 +17,9 @@ import kotlinx.coroutines.launch
 
 data class DashboardUiState(
     val signalState: OduSignalState = OduSignalState(),
+    val signalHistory: List<OduSignalState> = emptyList(),
     val pollingIntervalMs: Long = 3000L,
     val isRefreshing: Boolean = false,
-    val activeTab: Int = 0,
-    val historyList: List<OduSignalState> = emptyList(),
-    val historyRetention: HistoryRetention = HistoryRetention.TWENTY_FOUR_HOURS,
     val widgetConfig: WidgetConfig = WidgetConfig()
 )
 
@@ -34,7 +31,6 @@ class DashboardViewModel(
     private val widgetPrefs = WidgetPreferences(context)
     private val _uiState = MutableStateFlow(
         DashboardUiState(
-            historyRetention = repository.getHistoryRetention(),
             widgetConfig = widgetPrefs.getWidgetConfig()
         )
     )
@@ -43,21 +39,33 @@ class DashboardViewModel(
     private var pollingJob: Job? = null
 
     init {
+        viewModelScope.launch {
+            val cachedHistory = repository.getHistoryList().takeLast(30)
+            if (cachedHistory.isNotEmpty()) {
+                _uiState.value = _uiState.value.copy(
+                    signalHistory = cachedHistory,
+                    signalState = cachedHistory.last()
+                )
+            }
+        }
         startPolling()
-        loadHistory()
     }
 
     fun startPolling() {
         pollingJob?.cancel()
         pollingJob = viewModelScope.launch {
             repository.getSignalStream(_uiState.value.pollingIntervalMs).collect { newState ->
+                val currentHistory = _uiState.value.signalHistory
+                val updatedHistory = if (newState.isConnected) {
+                    (currentHistory + newState).takeLast(30)
+                } else {
+                    currentHistory
+                }
                 _uiState.value = _uiState.value.copy(
                     signalState = newState,
+                    signalHistory = updatedHistory,
                     isRefreshing = false
                 )
-                if (_uiState.value.activeTab == 1) {
-                    loadHistory()
-                }
             }
         }
     }
@@ -71,37 +79,18 @@ class DashboardViewModel(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isRefreshing = true)
             val newState = repository.fetchCurrentSignalOnce()
+            val currentHistory = _uiState.value.signalHistory
+            val updatedHistory = if (newState.isConnected) {
+                (currentHistory + newState).takeLast(30)
+            } else {
+                currentHistory
+            }
             _uiState.value = _uiState.value.copy(
                 signalState = newState,
+                signalHistory = updatedHistory,
                 isRefreshing = false
             )
-            loadHistory()
         }
-    }
-
-    fun setActiveTab(tabIndex: Int) {
-        _uiState.value = _uiState.value.copy(activeTab = tabIndex)
-        if (tabIndex == 1) {
-            loadHistory()
-        }
-    }
-
-    fun loadHistory() {
-        viewModelScope.launch {
-            val history = repository.getHistoryList()
-            _uiState.value = _uiState.value.copy(historyList = history)
-        }
-    }
-
-    fun setHistoryRetention(retention: HistoryRetention) {
-        repository.saveHistoryRetention(retention)
-        _uiState.value = _uiState.value.copy(historyRetention = retention)
-        loadHistory()
-    }
-
-    fun clearHistory() {
-        repository.clearAllHistory()
-        loadHistory()
     }
 
     fun updateWidgetConfig(config: WidgetConfig) {
