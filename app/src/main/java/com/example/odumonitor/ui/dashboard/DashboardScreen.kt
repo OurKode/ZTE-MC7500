@@ -2229,6 +2229,14 @@ fun SettingsBottomSheet(
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(18.dp))
+            Text(
+                text = "ZTE ODU Monitor v${com.example.odumonitor.BuildConfig.VERSION_NAME} (Build ${com.example.odumonitor.BuildConfig.VERSION_CODE})",
+                fontSize = 11.sp,
+                color = TextMuted,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
         }
     }
 }
