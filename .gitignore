@@ -47,3 +47,9 @@ RULES.md
 SCHEMA.md
 *.md
 !README.md
+
+# Local tools & screenshots
+.codegraph/
+*.png
+zte-script-ng.js
+
