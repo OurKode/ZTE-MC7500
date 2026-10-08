@@ -162,7 +162,7 @@ class OduRepository(
             uploadSpeedBps = bundle.traffic?.realTxSpeed ?: 0L,
             dayRxBytes = bundle.traffic?.dayRxBytes ?: 0L,
             monthRxBytes = bundle.traffic?.monthRxBytes ?: 0L,
-            connectedDevicesCount = bundle.userListNum?.accessTotalNum ?: 0,
+            connectedDevicesCount = 1,
             simPhoneNumber = bundle.simInfo?.msisdn,
 
             // Deep Diagnostics Telemetry

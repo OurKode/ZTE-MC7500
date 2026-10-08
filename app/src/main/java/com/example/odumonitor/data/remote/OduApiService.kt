@@ -157,13 +157,12 @@ class OduApiService(
             val token = if (isAuth) sessionToken else "00000000000000000000000000000000"
 
             val payload = if (isAuth) {
-                // Batch query: netinfo + router status + traffic + sim info + client count + thermal + device info in 1 single HTTP request
+                // Batch query: netinfo + router status + traffic + sim info + thermal + device info in 1 single HTTP request
                 """[
                     {"jsonrpc":"2.0","id":1,"method":"call","params":["$token","zte_nwinfo_api","nwinfo_get_netinfo",{}]},
                     {"jsonrpc":"2.0","id":2,"method":"call","params":["$token","zwrt_router.api","router_get_status",{}]},
                     {"jsonrpc":"2.0","id":3,"method":"call","params":["$token","zwrt_data","get_wwandst",{"source_module":"web","cid":1,"type":4}]},
                     {"jsonrpc":"2.0","id":4,"method":"call","params":["$token","zwrt_zte_mdm.api","get_sim_info",{}]},
-                    {"jsonrpc":"2.0","id":5,"method":"call","params":["$token","zwrt_router.api","router_get_user_list_num",{}]},
                     {"jsonrpc":"2.0","id":6,"method":"call","params":["$token","zwrt_bsp.thermal","get_cpu_temp",{}]},
                     {"jsonrpc":"2.0","id":7,"method":"call","params":["$token","zwrt_mc.device.manager","get_device_info",{}]}
                 ]""".trimIndent()
@@ -190,7 +189,6 @@ class OduApiService(
             val routerStatus = if (isAuth) responses.find { it.id == 2 }?.extractPayload<OduRouterStatusPayload>(json) else null
             val traffic = if (isAuth) responses.find { it.id == 3 }?.extractPayload<OduTrafficPayload>(json) else null
             val simInfo = if (isAuth) responses.find { it.id == 4 }?.extractPayload<OduSimInfoPayload>(json) else null
-            val userList = if (isAuth) responses.find { it.id == 5 }?.extractPayload<OduUserListNumPayload>(json) else null
             val thermal = if (isAuth) responses.find { it.id == 6 }?.extractPayload<OduThermalPayload>(json) else null
             val deviceInfo = if (isAuth) responses.find { it.id == 7 }?.extractPayload<OduDeviceInfoPayload>(json) else null
 
@@ -199,7 +197,7 @@ class OduApiService(
                 routerStatus = routerStatus,
                 traffic = traffic,
                 simInfo = simInfo,
-                userListNum = userList,
+                userListNum = null,
                 thermal = thermal,
                 deviceInfo = deviceInfo,
                 isLoggedIn = isAuth

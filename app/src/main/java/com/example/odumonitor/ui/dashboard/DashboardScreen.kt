@@ -970,7 +970,7 @@ fun RouterTrafficCard(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Sub-metrics Grid (WAN IP, Trafik Bulan Ini, Klien Terhubung, No. SIM)
+            // Sub-metrics Grid (Identitas SIM/IP, Statistik Kuota, Kondisi Gateway)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -982,8 +982,8 @@ fun RouterTrafficCard(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 RouterMetricItem(
-                    label = "TRAFIK BULAN INI",
-                    value = if (signal.monthRxBytes > 0) formatBytes(signal.monthRxBytes) else "-",
+                    label = "NO. TELEPON SIM",
+                    value = signal.simPhoneNumber ?: "-",
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -995,14 +995,14 @@ fun RouterTrafficCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 RouterMetricItem(
-                    label = "KLIEN TERHUBUNG",
-                    value = if (signal.isRouterLoggedIn) "${signal.connectedDevicesCount} Perangkat" else "-",
+                    label = "TRAFIK BULAN INI",
+                    value = if (signal.monthRxBytes > 0) formatBytes(signal.monthRxBytes) else "-",
                     modifier = Modifier.weight(1f)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 RouterMetricItem(
-                    label = "NO. TELEPON SIM",
-                    value = signal.simPhoneNumber ?: "-",
+                    label = "TRAFIK HARI INI",
+                    value = if (signal.dayRxBytes > 0) formatBytes(signal.dayRxBytes) else "-",
                     modifier = Modifier.weight(1f)
                 )
             }
