@@ -42,19 +42,27 @@ class OduRepository(
     suspend fun fetchCurrentSignalOnce(): OduSignalState {
         val result = apiService.fetchNetInfo()
         val state = if (result.isSuccess) {
-            mapPayloadToDomain(result.getOrNull()!!)
+            val mapped = mapPayloadToDomain(result.getOrNull()!!)
+            saveAndPruneSignalHistory(mapped)
+            mapped
         } else {
-            OduSignalState(
-                isConnected = false,
-                connectionType = "Disconnected",
-                errorMessage = result.exceptionOrNull()?.message ?: "Failed to connect",
-                lastUpdated = System.currentTimeMillis()
-            )
-        }
-        if (state.isConnected) {
-            saveAndPruneSignalHistory(state)
+            val lastGood = getLastCachedSignal()
+            if (lastGood != null && lastGood.isConnected) {
+                lastGood
+            } else {
+                OduSignalState(
+                    isConnected = false,
+                    connectionType = "Disconnected",
+                    errorMessage = result.exceptionOrNull()?.message ?: "Failed to connect",
+                    lastUpdated = System.currentTimeMillis()
+                )
+            }
         }
         return state
+    }
+
+    fun getLastCachedSignal(): OduSignalState? {
+        return dbHelper?.getHistory(limit = 1)?.firstOrNull()
     }
 
     private fun saveAndPruneSignalHistory(state: OduSignalState) {
