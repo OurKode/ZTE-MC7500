@@ -13,6 +13,20 @@ data class WidgetConfig(
     val showTimestamp: Boolean = true,
     val updateIntervalMinutes: Int = 15 // Options: 15, 30, 60, 180, 360, -1 (manual)
 )
+ 
+data class RouterCredentials(
+    val host: String = "192.168.254.1",
+    val username: String = "Admin",
+    val password: String = "bBHZsMfjkPrSY0!",
+    val isLoginEnabled: Boolean = true
+)
+
+data class NotificationConfig(
+    val isServiceEnabled: Boolean = true,
+    val notifyBandChange: Boolean = true,
+    val notifyWanIpChange: Boolean = true,
+    val notifyOduOffline: Boolean = true
+)
 
 class WidgetPreferences(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
@@ -29,6 +43,54 @@ class WidgetPreferences(context: Context) {
         private const val KEY_UPDATE_INTERVAL = "update_interval_minutes"
 
         private const val KEY_RETENTION_SETTING = "history_retention_setting"
+
+        private const val KEY_ROUTER_HOST = "router_host"
+        private const val KEY_ROUTER_USERNAME = "router_username"
+        private const val KEY_ROUTER_PASSWORD = "router_password"
+        private const val KEY_ENABLE_ROUTER_LOGIN = "enable_router_login"
+
+        private const val KEY_ENABLE_MONITOR_SERVICE = "enable_monitor_service"
+        private const val KEY_NOTIFY_BAND_CHANGE = "notify_band_change"
+        private const val KEY_NOTIFY_WAN_IP_CHANGE = "notify_wan_ip_change"
+        private const val KEY_NOTIFY_ODU_OFFLINE = "notify_odu_offline"
+    }
+
+    fun getNotificationConfig(): NotificationConfig {
+        return NotificationConfig(
+            isServiceEnabled = prefs.getBoolean(KEY_ENABLE_MONITOR_SERVICE, true),
+            notifyBandChange = prefs.getBoolean(KEY_NOTIFY_BAND_CHANGE, true),
+            notifyWanIpChange = prefs.getBoolean(KEY_NOTIFY_WAN_IP_CHANGE, true),
+            notifyOduOffline = prefs.getBoolean(KEY_NOTIFY_ODU_OFFLINE, true)
+        )
+    }
+
+    fun saveNotificationConfig(config: NotificationConfig) {
+        prefs.edit().apply {
+            putBoolean(KEY_ENABLE_MONITOR_SERVICE, config.isServiceEnabled)
+            putBoolean(KEY_NOTIFY_BAND_CHANGE, config.notifyBandChange)
+            putBoolean(KEY_NOTIFY_WAN_IP_CHANGE, config.notifyWanIpChange)
+            putBoolean(KEY_NOTIFY_ODU_OFFLINE, config.notifyOduOffline)
+            apply()
+        }
+    }
+
+    fun getRouterCredentials(): RouterCredentials {
+        return RouterCredentials(
+            host = prefs.getString(KEY_ROUTER_HOST, "192.168.254.1") ?: "192.168.254.1",
+            username = prefs.getString(KEY_ROUTER_USERNAME, "Admin") ?: "Admin",
+            password = prefs.getString(KEY_ROUTER_PASSWORD, "bBHZsMfjkPrSY0!") ?: "bBHZsMfjkPrSY0!",
+            isLoginEnabled = prefs.getBoolean(KEY_ENABLE_ROUTER_LOGIN, true)
+        )
+    }
+
+    fun saveRouterCredentials(creds: RouterCredentials) {
+        prefs.edit().apply {
+            putString(KEY_ROUTER_HOST, creds.host.trim())
+            putString(KEY_ROUTER_USERNAME, creds.username.trim())
+            putString(KEY_ROUTER_PASSWORD, creds.password)
+            putBoolean(KEY_ENABLE_ROUTER_LOGIN, creds.isLoginEnabled)
+            apply()
+        }
     }
 
     fun getWidgetConfig(): WidgetConfig {
