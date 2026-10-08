@@ -48,7 +48,15 @@ class MainActivity : ComponentActivity() {
                     onWidgetConfigChanged = { viewModel.updateWidgetConfig(it) },
                     onRouterCredentialsChanged = { viewModel.updateRouterCredentials(it) },
                     onTestRouterLogin = { viewModel.testRouterLogin(it) },
-                    onNotificationConfigChanged = { viewModel.updateNotificationConfig(it) }
+                    onNotificationConfigChanged = { viewModel.updateNotificationConfig(it) },
+                    onSetNetworkSelect = { viewModel.setNetworkSelect(it) },
+                    onSet4gBandLock = { mask, label -> viewModel.set4gBandLock(mask, label) },
+                    onSet5gBandLock = { bands, label -> viewModel.set5gBandLock(bands, label) },
+                    onLock4gCell = { pci, earfcn -> viewModel.lock4gCell(pci, earfcn) },
+                    onUnlock4gCell = { viewModel.unlock4gCell() },
+                    onLock5gCell = { pci, arfcn, band -> viewModel.lock5gCell(pci, arfcn, band) },
+                    onUnlock5gCell = { viewModel.unlock5gCell() },
+                    onClearRadioMessage = { viewModel.clearRadioCommandMessage() }
                 )
             }
         }

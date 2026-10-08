@@ -38,6 +38,8 @@ data class OduNetInfoPayload(
     @SerialName("nr5g_action_band") val nr5gActionBand: String? = null,
     @SerialName("nr5g_pci") val nr5gPci: Int? = null,
     @SerialName("nr5g_cell_id") val nr5gCellId: Long? = null,
+    @SerialName("nr5g_action_channel") val nr5gActionChannel: String? = null,
+    @SerialName("nr5g_bandwidth") val nr5gBandwidth: String? = null,
     
     // 4G Metrics
     @SerialName("lte_rsrp") val lteRsrp: Int? = null,
@@ -46,11 +48,33 @@ data class OduNetInfoPayload(
     @SerialName("wan_active_band") val wanActiveBand: String? = null,
     @SerialName("cell_id") val cellId: Long? = null,
     @SerialName("lte_pci") val ltePci: Int? = null,
+    @SerialName("lte_action_channel") val lteActionChannel: String? = null,
+    @SerialName("lte_bandwidth") val lteBandwidth: String? = null,
     
     // CA & Neighbors
     @SerialName("lteca_state") val lteCaState: Int? = 0,
     @SerialName("lteca") val lteCaString: String? = null,
-    @SerialName("lte_neighbor_cell") val lteNeighborCell: String? = null
+    @SerialName("lte_neighbor_cell") val lteNeighborCell: String? = null,
+
+    // Radio Selection & Cell Locks
+    @SerialName("net_select") val netSelect: String? = null,
+    @SerialName("lte_band_lock") val lteBandLock: String? = null,
+    @SerialName("nr_band_lock") val nrBandLock: String? = null,
+    @SerialName("lock_lte_cell") val lockLteCell: String? = null,
+    @SerialName("lock_nr_cell") val lockNrCell: String? = null
+)
+
+@Serializable
+data class OduThermalPayload(
+    @SerialName("cpuss_temp") val cpussTemp: String? = null
+)
+
+@Serializable
+data class OduDeviceInfoPayload(
+    @SerialName("device_uptime") val deviceUptime: Long? = null,
+    @SerialName("hardware_version") val hardwareVersion: String? = null,
+    @SerialName("software_version") val softwareVersion: String? = null,
+    @SerialName("wa_inner_version") val waInnerVersion: String? = null
 )
 
 @Serializable
@@ -103,6 +127,8 @@ data class OduTelemetryBundle(
     val traffic: OduTrafficPayload? = null,
     val simInfo: OduSimInfoPayload? = null,
     val userListNum: OduUserListNumPayload? = null,
+    val thermal: OduThermalPayload? = null,
+    val deviceInfo: OduDeviceInfoPayload? = null,
     val isLoggedIn: Boolean = false
 )
 
@@ -119,6 +145,9 @@ data class OduSignalState(
     val lteBand: String = "-",
     val ltePci: Int = 0,
     val lteCellId: Long = 0L,
+    val lteEarfcn: Int? = null,
+    val lteDlFreqMhz: Float? = null,
+    val lteBandwidth: String? = null,
     
     val nrRsrp: Int = 0,
     val nrRsrq: Int = 0,
@@ -126,6 +155,9 @@ data class OduSignalState(
     val nrBand: String = "-",
     val nrPci: Int = 0,
     val nrCellId: Long = 0L,
+    val nrArfcn: Int? = null,
+    val nrDlFreqMhz: Float? = null,
+    val nrBandwidth: String? = null,
     
     val isCaActive: Boolean = false,
     val caDetails: String = "-",
@@ -144,5 +176,16 @@ data class OduSignalState(
     val dayRxBytes: Long = 0L,
     val monthRxBytes: Long = 0L,
     val connectedDevicesCount: Int = 0,
-    val simPhoneNumber: String? = null
+    val simPhoneNumber: String? = null,
+
+    // Deep Diagnostics Telemetry
+    val cpuTemp: String? = null,
+    val deviceUptimeSeconds: Long? = null,
+    val softwareVersion: String? = null,
+
+    // Radio Selection & Cell Locks
+    val netSelect: String? = null,
+    val lteBandLock: String? = null,
+    val lockLteCell: String? = null,
+    val lockNrCell: String? = null
 )

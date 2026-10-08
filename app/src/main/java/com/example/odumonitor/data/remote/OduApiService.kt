@@ -157,13 +157,15 @@ class OduApiService(
             val token = if (isAuth) sessionToken else "00000000000000000000000000000000"
 
             val payload = if (isAuth) {
-                // Batch query: netinfo + router status + traffic + sim info + client count in 1 single HTTP request
+                // Batch query: netinfo + router status + traffic + sim info + client count + thermal + device info in 1 single HTTP request
                 """[
                     {"jsonrpc":"2.0","id":1,"method":"call","params":["$token","zte_nwinfo_api","nwinfo_get_netinfo",{}]},
                     {"jsonrpc":"2.0","id":2,"method":"call","params":["$token","zwrt_router.api","router_get_status",{}]},
                     {"jsonrpc":"2.0","id":3,"method":"call","params":["$token","zwrt_data","get_wwandst",{"source_module":"web","cid":1,"type":4}]},
                     {"jsonrpc":"2.0","id":4,"method":"call","params":["$token","zwrt_zte_mdm.api","get_sim_info",{}]},
-                    {"jsonrpc":"2.0","id":5,"method":"call","params":["$token","zwrt_router.api","router_get_user_list_num",{}]}
+                    {"jsonrpc":"2.0","id":5,"method":"call","params":["$token","zwrt_router.api","router_get_user_list_num",{}]},
+                    {"jsonrpc":"2.0","id":6,"method":"call","params":["$token","zwrt_bsp.thermal","get_cpu_temp",{}]},
+                    {"jsonrpc":"2.0","id":7,"method":"call","params":["$token","zwrt_mc.device.manager","get_device_info",{}]}
                 ]""".trimIndent()
             } else {
                 """[{"jsonrpc":"2.0","id":1,"method":"call","params":["00000000000000000000000000000000","zte_nwinfo_api","nwinfo_get_netinfo",{}]}]"""
@@ -189,6 +191,8 @@ class OduApiService(
             val traffic = if (isAuth) responses.find { it.id == 3 }?.extractPayload<OduTrafficPayload>(json) else null
             val simInfo = if (isAuth) responses.find { it.id == 4 }?.extractPayload<OduSimInfoPayload>(json) else null
             val userList = if (isAuth) responses.find { it.id == 5 }?.extractPayload<OduUserListNumPayload>(json) else null
+            val thermal = if (isAuth) responses.find { it.id == 6 }?.extractPayload<OduThermalPayload>(json) else null
+            val deviceInfo = if (isAuth) responses.find { it.id == 7 }?.extractPayload<OduDeviceInfoPayload>(json) else null
 
             OduTelemetryBundle(
                 netInfo = netInfo,
@@ -196,6 +200,8 @@ class OduApiService(
                 traffic = traffic,
                 simInfo = simInfo,
                 userListNum = userList,
+                thermal = thermal,
+                deviceInfo = deviceInfo,
                 isLoggedIn = isAuth
             )
         }
@@ -241,6 +247,59 @@ class OduApiService(
             }
             return bodyString
         }
+    }
+
+    suspend fun executeAuthenticatedCommand(
+        creds: RouterCredentials,
+        service: String,
+        method: String,
+        paramsJson: String,
+        tag: String
+    ): Result<Boolean> = withContext(Dispatchers.IO) {
+        val cleanHost = creds.host.trim().ifBlank { "192.168.254.1" }
+
+        // Ensure session is alive
+        if (!isCurrentlyLoggedIn || sessionToken == "00000000000000000000000000000000") {
+            val loginRes = login(cleanHost, creds.username, creds.password)
+            if (loginRes.isFailure) {
+                return@withContext Result.failure(
+                    loginRes.exceptionOrNull() ?: IOException("Autentikasi router diperlukan untuk perintah ini")
+                )
+            }
+        }
+
+        var lastException: Throwable? = null
+        for (attempt in 1..3) {
+            val result = runCatching {
+                val timestamp = System.currentTimeMillis()
+                val payload = """[{"jsonrpc":"2.0","id":1,"method":"call","params":["$sessionToken","$service","$method",$paramsJson]}]"""
+                val respStr = executeRpc(cleanHost, tag, payload, timestamp)
+                val respList = json.decodeFromString<List<UbusResponse>>(respStr)
+                val resp = respList.firstOrNull() ?: throw IOException("Respons router kosong")
+
+                val errStr = resp.error?.toString() ?: ""
+                if (errStr.contains("-32002")) {
+                    resetSession()
+                    login(cleanHost, creds.username, creds.password).getOrThrow()
+                    throw IOException("Session expired (-32002), retrying...")
+                }
+
+                val resultCode = resp.result?.firstOrNull()?.toString()?.toIntOrNull() ?: 0
+                if (resultCode != 0) {
+                    throw IOException("Router menolak konfigurasi (kode respons: $resultCode)")
+                }
+                true
+            }
+
+            if (result.isSuccess) {
+                return@withContext Result.success(true)
+            } else {
+                lastException = result.exceptionOrNull()
+                kotlinx.coroutines.delay(250)
+            }
+        }
+
+        Result.failure(lastException ?: IOException("Gagal mengeksekusi $method"))
     }
 
     suspend fun fetchNetInfo(): Result<OduNetInfoPayload> = withContext(Dispatchers.IO) {

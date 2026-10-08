@@ -27,7 +27,9 @@ data class DashboardUiState(
     val routerCredentials: RouterCredentials = RouterCredentials(),
     val notificationConfig: NotificationConfig = NotificationConfig(),
     val loginStatusMessage: String? = null,
-    val isTestingLogin: Boolean = false
+    val isTestingLogin: Boolean = false,
+    val isExecutingRadioCommand: Boolean = false,
+    val radioCommandMessage: String? = null
 )
 
 class DashboardViewModel(
@@ -142,6 +144,76 @@ class DashboardViewModel(
         } else {
             OduMonitorService.stopService(context)
         }
+    }
+
+    private fun executeRadioAction(actionName: String, block: suspend () -> Result<Boolean>) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isExecutingRadioCommand = true,
+                radioCommandMessage = "Menerapkan $actionName..."
+            )
+            val res = block()
+            val msg = if (res.isSuccess) {
+                "Berhasil menerapkan $actionName. Menunggu modem re-sinkronisasi..."
+            } else {
+                "Gagal menerapkan $actionName: ${res.exceptionOrNull()?.message}"
+            }
+            _uiState.value = _uiState.value.copy(
+                isExecutingRadioCommand = false,
+                radioCommandMessage = msg
+            )
+            if (res.isSuccess) {
+                kotlinx.coroutines.delay(1200)
+                refreshImmediately()
+            }
+        }
+    }
+
+    fun setNetworkSelect(mode: String) {
+        val label = com.example.odumonitor.util.FrequencyConverter.formatBearerModeName(mode)
+        executeRadioAction("Mode Jaringan ($label)") {
+            repository.setNetworkSelect(mode)
+        }
+    }
+
+    fun set4gBandLock(maskStr: String, label: String) {
+        executeRadioAction("Kunci Band 4G ($label)") {
+            repository.set4gBandLock(maskStr)
+        }
+    }
+
+    fun set5gBandLock(bandsStr: String, label: String) {
+        executeRadioAction("Kunci Band 5G ($label)") {
+            repository.set5gBandLock(bandsStr)
+        }
+    }
+
+    fun lock4gCell(pci: Int, earfcn: Int) {
+        executeRadioAction("Kunci Sel 4G (PCI $pci, EARFCN $earfcn)") {
+            repository.lock4gCell(pci, earfcn)
+        }
+    }
+
+    fun unlock4gCell() {
+        executeRadioAction("Buka Kunci Sel 4G") {
+            repository.unlock4gCell()
+        }
+    }
+
+    fun lock5gCell(pci: Int, earfcnOrArfcn: Int, bandNumber: Int) {
+        executeRadioAction("Kunci Sel 5G (PCI $pci, ARFCN $earfcnOrArfcn, n$bandNumber)") {
+            repository.lock5gCell(pci, earfcnOrArfcn, bandNumber)
+        }
+    }
+
+    fun unlock5gCell() {
+        executeRadioAction("Buka Kunci Sel 5G") {
+            repository.unlock5gCell()
+        }
+    }
+
+    fun clearRadioCommandMessage() {
+        _uiState.value = _uiState.value.copy(radioCommandMessage = null)
     }
 
     class Factory(private val context: Context) : ViewModelProvider.Factory {
