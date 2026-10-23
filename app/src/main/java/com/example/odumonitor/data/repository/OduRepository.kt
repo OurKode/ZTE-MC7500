@@ -1,6 +1,7 @@
 package com.example.odumonitor.data.repository
 
 import android.content.Context
+import com.example.odumonitor.data.local.ChartTimeRange
 import com.example.odumonitor.data.local.HistoryRetention
 import com.example.odumonitor.data.local.OduDatabaseHelper
 import com.example.odumonitor.data.local.RouterCredentials
@@ -28,19 +29,16 @@ class OduRepository(
                 saveAndPruneSignalHistory(state)
                 emit(state)
             } else {
-                val errorMsg = result.exceptionOrNull()?.message ?: "Unknown Network Error"
-                val lastGood = getLastCachedSignal()
-                val fallbackState = if (lastGood != null && lastGood.isConnected) {
-                    lastGood
-                } else {
+                val rawErr = result.exceptionOrNull()?.message ?: "Jaringan tidak terjangkau"
+                emit(
                     OduSignalState(
                         isConnected = false,
-                        connectionType = "Disconnected",
-                        errorMessage = errorMsg,
+                        connectionType = "Terputus",
+                        provider = "ODU Terputus (Offline)",
+                        errorMessage = "Tidak dapat terhubung ke ODU di ${creds.host}. Pastikan Wi-Fi/LAN terhubung ke router. ($rawErr)",
                         lastUpdated = System.currentTimeMillis()
                     )
-                }
-                emit(fallbackState)
+                )
             }
             kotlinx.coroutines.delay(pollingIntervalMs)
         }
@@ -49,24 +47,20 @@ class OduRepository(
     suspend fun fetchCurrentSignalOnce(): OduSignalState {
         val creds = widgetPrefs?.getRouterCredentials() ?: RouterCredentials()
         val result = apiService.fetchTelemetry(creds)
-        val state = if (result.isSuccess) {
+        return if (result.isSuccess) {
             val mapped = mapPayloadToDomain(result.getOrNull()!!)
             saveAndPruneSignalHistory(mapped)
             mapped
         } else {
-            val lastGood = getLastCachedSignal()
-            if (lastGood != null && lastGood.isConnected) {
-                lastGood
-            } else {
-                OduSignalState(
-                    isConnected = false,
-                    connectionType = "Disconnected",
-                    errorMessage = result.exceptionOrNull()?.message ?: "Failed to connect",
-                    lastUpdated = System.currentTimeMillis()
-                )
-            }
+            val rawErr = result.exceptionOrNull()?.message ?: "Jaringan tidak terjangkau"
+            OduSignalState(
+                isConnected = false,
+                connectionType = "Terputus",
+                provider = "ODU Terputus (Offline)",
+                errorMessage = "Tidak dapat terhubung ke ODU di ${creds.host}. Pastikan Wi-Fi/LAN terhubung ke router. ($rawErr)",
+                lastUpdated = System.currentTimeMillis()
+            )
         }
-        return state
     }
 
     suspend fun testLogin(creds: RouterCredentials): Result<String> {
@@ -87,6 +81,15 @@ class OduRepository(
 
     fun getHistoryList(): List<OduSignalState> {
         return dbHelper?.getHistory(limit = 300) ?: emptyList()
+    }
+
+    fun getHistoryForRange(range: ChartTimeRange, maxPoints: Int = 60): List<OduSignalState> {
+        val sinceMs = System.currentTimeMillis() - range.durationMillis
+        return dbHelper?.getHistorySince(
+            sinceTimestampMs = sinceMs,
+            windowDurationMs = range.durationMillis,
+            maxPoints = maxPoints
+        ) ?: emptyList()
     }
 
     fun clearAllHistory(): Int {
@@ -232,12 +235,19 @@ class OduRepository(
             creds = creds,
             service = "zte_nwinfo_api",
             method = "nwinfo_lock_nr_cell",
-            paramsJson = """{"lock_nr_pci":"$pci","lock_nr_earfcn":"$earfcnOrArfcn","lock_nr_cell_band":"$bandNumber"}""",
+            paramsJson = """{"nr5g_CellLockType":1,"nr5g_pci":$pci,"nr5g_arfcn":$earfcnOrArfcn,"nr5g_band":$bandNumber,"nr5g_scs":1}""",
             tag = "nwinfo_lock_nr_cell"
         )
     }
 
     suspend fun unlock5gCell(): Result<Boolean> {
-        return lock5gCell(0, 0, 0)
+        val creds = widgetPrefs?.getRouterCredentials() ?: RouterCredentials()
+        return apiService.executeAuthenticatedCommand(
+            creds = creds,
+            service = "zte_nwinfo_api",
+            method = "nwinfo_lock_nr_cell",
+            paramsJson = """{"nr5g_CellLockType":0,"nr5g_pci":0,"nr5g_arfcn":0,"nr5g_band":0,"nr5g_scs":0}""",
+            tag = "nwinfo_lock_nr_cell"
+        )
     }
 }

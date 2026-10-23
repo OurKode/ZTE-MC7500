@@ -13,11 +13,11 @@ data class WidgetConfig(
     val showTimestamp: Boolean = true,
     val updateIntervalMinutes: Int = 15 // Options: 15, 30, 60, 180, 360, -1 (manual)
 )
- 
+
 data class RouterCredentials(
     val host: String = "192.168.254.1",
     val username: String = "Admin",
-    val password: String = "bBHZsMfjkPrSY0!",
+    val password: String = "",
     val isLoginEnabled: Boolean = true
 )
 
@@ -26,6 +26,16 @@ data class NotificationConfig(
     val notifyBandChange: Boolean = true,
     val notifyWanIpChange: Boolean = true,
     val notifyOduOffline: Boolean = true
+)
+
+data class UiPreferences(
+    val pollingIntervalMs: Long = 3000L,
+    val chartTimeRange: ChartTimeRange = ChartTimeRange.FIVE_MINUTES,
+    val selected5gMetric: String = "SINR",
+    val selected4gMetric: String = "SINR",
+    val lastSelectedTab: Int = 0,
+    val custom4gBands: Set<Int> = setOf(1, 3, 8, 40),
+    val custom5gBands: Set<Int> = setOf(1, 3, 28, 40, 78)
 )
 
 class WidgetPreferences(context: Context) {
@@ -53,6 +63,45 @@ class WidgetPreferences(context: Context) {
         private const val KEY_NOTIFY_BAND_CHANGE = "notify_band_change"
         private const val KEY_NOTIFY_WAN_IP_CHANGE = "notify_wan_ip_change"
         private const val KEY_NOTIFY_ODU_OFFLINE = "notify_odu_offline"
+
+        // User UI Preferences
+        private const val KEY_POLLING_INTERVAL_MS = "ui_polling_interval_ms"
+        private const val KEY_CHART_TIME_RANGE = "ui_chart_time_range"
+        private const val KEY_SELECTED_5G_METRIC = "ui_selected_5g_metric"
+        private const val KEY_SELECTED_4G_METRIC = "ui_selected_4g_metric"
+        private const val KEY_LAST_SELECTED_TAB = "ui_last_selected_tab"
+        private const val KEY_CUSTOM_4G_BANDS = "ui_custom_4g_bands"
+        private const val KEY_CUSTOM_5G_BANDS = "ui_custom_5g_bands"
+    }
+
+    fun getUiPreferences(): UiPreferences {
+        val raw4g = prefs.getString(KEY_CUSTOM_4G_BANDS, "1,3,8,40") ?: "1,3,8,40"
+        val raw5g = prefs.getString(KEY_CUSTOM_5G_BANDS, "1,3,28,40,78") ?: "1,3,28,40,78"
+        val parsed4g = raw4g.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
+        val parsed5g = raw5g.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
+
+        return UiPreferences(
+            pollingIntervalMs = prefs.getLong(KEY_POLLING_INTERVAL_MS, 3000L).coerceIn(1000L, 60000L),
+            chartTimeRange = ChartTimeRange.fromName(prefs.getString(KEY_CHART_TIME_RANGE, ChartTimeRange.FIVE_MINUTES.name)),
+            selected5gMetric = prefs.getString(KEY_SELECTED_5G_METRIC, "SINR") ?: "SINR",
+            selected4gMetric = prefs.getString(KEY_SELECTED_4G_METRIC, "SINR") ?: "SINR",
+            lastSelectedTab = prefs.getInt(KEY_LAST_SELECTED_TAB, 0).coerceIn(0, 2),
+            custom4gBands = if (parsed4g.isNotEmpty()) parsed4g else setOf(1, 3, 8, 40),
+            custom5gBands = if (parsed5g.isNotEmpty()) parsed5g else setOf(1, 3, 28, 40, 78)
+        )
+    }
+
+    fun saveUiPreferences(uiPrefs: UiPreferences) {
+        prefs.edit().apply {
+            putLong(KEY_POLLING_INTERVAL_MS, uiPrefs.pollingIntervalMs)
+            putString(KEY_CHART_TIME_RANGE, uiPrefs.chartTimeRange.name)
+            putString(KEY_SELECTED_5G_METRIC, uiPrefs.selected5gMetric)
+            putString(KEY_SELECTED_4G_METRIC, uiPrefs.selected4gMetric)
+            putInt(KEY_LAST_SELECTED_TAB, uiPrefs.lastSelectedTab)
+            putString(KEY_CUSTOM_4G_BANDS, uiPrefs.custom4gBands.sorted().joinToString(","))
+            putString(KEY_CUSTOM_5G_BANDS, uiPrefs.custom5gBands.sorted().joinToString(","))
+            apply()
+        }
     }
 
     fun getNotificationConfig(): NotificationConfig {
@@ -78,7 +127,7 @@ class WidgetPreferences(context: Context) {
         return RouterCredentials(
             host = prefs.getString(KEY_ROUTER_HOST, "192.168.254.1") ?: "192.168.254.1",
             username = prefs.getString(KEY_ROUTER_USERNAME, "Admin") ?: "Admin",
-            password = prefs.getString(KEY_ROUTER_PASSWORD, "bBHZsMfjkPrSY0!") ?: "bBHZsMfjkPrSY0!",
+            password = prefs.getString(KEY_ROUTER_PASSWORD, "") ?: "",
             isLoginEnabled = prefs.getBoolean(KEY_ENABLE_ROUTER_LOGIN, true)
         )
     }
