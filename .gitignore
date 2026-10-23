@@ -25,8 +25,13 @@ app/build/
 *.ipr
 out/
 
-# Local configuration file (sdk path, secrets, etc)
+# Local configuration & signing secrets
 local.properties
+*.keystore
+*.jks
+*.pem
+.env
+.env.*
 
 # Log files
 *.log
@@ -38,7 +43,7 @@ local.properties
 .DS_Store
 Thumbs.db
 
-# Project documentation & raw HAR logs (except primary README)
+# Project documentation & raw HAR logs (except primary docs)
 192.168.254.1.md
 192.168.254.1(traffic).md
 ARCHITECTURE.md
@@ -47,6 +52,7 @@ RULES.md
 SCHEMA.md
 *.md
 !README.md
+!CHANGELOG.md
 !CONTRIBUTING.md
 !docs/*.md
 !docs/**/*.md
@@ -56,4 +62,3 @@ SCHEMA.md
 .codegraph/
 *.png
 zte-script-ng.js
-

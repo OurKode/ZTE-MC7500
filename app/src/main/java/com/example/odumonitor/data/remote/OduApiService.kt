@@ -82,6 +82,10 @@ class OduApiService(
 
     suspend fun login(host: String, username: String, password: String): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
+            if (password.isBlank()) {
+                isCurrentlyLoggedIn = false
+                throw IOException("Password router belum dikonfigurasi di Setelan")
+            }
             val timestamp = System.currentTimeMillis()
             val cleanHost = host.trim()
 
@@ -120,9 +124,10 @@ class OduApiService(
 
     suspend fun fetchTelemetry(creds: RouterCredentials): Result<OduTelemetryBundle> = withContext(Dispatchers.IO) {
         val cleanHost = creds.host.trim().ifBlank { "192.168.254.1" }
+        val canAuth = creds.isLoginEnabled && creds.password.isNotBlank()
 
-        // If login is enabled and we are not currently logged in, try authenticating first
-        if (creds.isLoginEnabled && (!isCurrentlyLoggedIn || sessionToken == "00000000000000000000000000000000")) {
+        // If login is enabled and password is provided, try authenticating first
+        if (canAuth && (!isCurrentlyLoggedIn || sessionToken == "00000000000000000000000000000000")) {
             login(cleanHost, creds.username, creds.password).onFailure {
                 // Login failed, but don't hard crash: proceed unauthenticated so RF metrics still work
                 isCurrentlyLoggedIn = false
@@ -130,10 +135,10 @@ class OduApiService(
             }
         }
 
-        var attemptResult = fetchTelemetryInternal(cleanHost, creds.isLoginEnabled && isCurrentlyLoggedIn)
+        var attemptResult = fetchTelemetryInternal(cleanHost, canAuth && isCurrentlyLoggedIn)
 
         // Auto-reconnect if session timed out (-32002 Access Denied)
-        if (attemptResult.isFailure && creds.isLoginEnabled) {
+        if (attemptResult.isFailure && canAuth) {
             val err = attemptResult.exceptionOrNull()?.message ?: ""
             if (err.contains("-32002") || err.contains("Access denied") || err.contains("session")) {
                 resetSession()
