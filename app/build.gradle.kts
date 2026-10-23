@@ -57,17 +57,15 @@ android {
         buildConfigField("String", "GIT_HASH", "\"${getGitShortCommitHash()}\"")
     }
 
+    val releaseKeystoreFile = rootProject.file("release.keystore")
+
     signingConfigs {
-        create("release") {
-            val keystoreFile = rootProject.file("release.keystore")
-            if (keystoreFile.exists()) {
-                storeFile = keystoreFile
+        if (releaseKeystoreFile.exists()) {
+            create("release") {
+                storeFile = releaseKeystoreFile
                 storePassword = project.findProperty("KEYSTORE_PASSWORD") as? String ?: "android"
                 keyAlias = project.findProperty("KEY_ALIAS") as? String ?: "release"
                 keyPassword = project.findProperty("KEY_PASSWORD") as? String ?: "android"
-            } else {
-                // Fallback otomatis ke debug keystore agar release build langsung dapat diinstall dan diuji
-                initWith(getByName("debug"))
             }
         }
     }
@@ -76,7 +74,11 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (releaseKeystoreFile.exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
