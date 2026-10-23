@@ -1,12 +1,11 @@
 package com.example.odumonitor.ui.dashboard
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -16,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,11 +26,15 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.odumonitor.data.local.ChartTimeRange
+import com.example.odumonitor.data.local.HistoryRetention
 import com.example.odumonitor.data.local.NotificationConfig
 import com.example.odumonitor.data.local.RouterCredentials
 import com.example.odumonitor.data.local.WidgetConfig
@@ -52,6 +56,7 @@ fun formatSpeed(bytesPerSec: Long): String {
     return when {
         bitsPerSec >= 1_000_000_000.0 -> String.format(Locale.US, "%.2f Gbps", bitsPerSec / 1_000_000_000.0)
         bitsPerSec >= 1_000_000.0 -> String.format(Locale.US, "%.1f Mbps", bitsPerSec / 1_000_000.0)
+        bitsPerSec >= 1_000_000.0 -> String.format(Locale.US, "%.1f Kbps", bitsPerSec / 1_000.0)
         bitsPerSec >= 1_000.0 -> String.format(Locale.US, "%.1f Kbps", bitsPerSec / 1_000.0)
         else -> String.format(Locale.US, "%.0f bps", bitsPerSec)
     }
@@ -63,12 +68,26 @@ enum class ChartMetric(val label: String, val unit: String) {
     SINR("SINR", "dB")
 }
 
+enum class DashboardNavTab(val label: String) {
+    MONITOR("Monitor"),
+    RADIO("Radio & Band"),
+    SETTINGS("Pengaturan")
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     uiState: DashboardUiState,
     onRefresh: () -> Unit,
     onPollingIntervalSelected: (Long) -> Unit,
+    onChartTimeRangeSelected: (ChartTimeRange) -> Unit = {},
+    onSelect5gMetric: (String) -> Unit = {},
+    onSelect4gMetric: (String) -> Unit = {},
+    onSelectTab: (Int) -> Unit = {},
+    onUpdateCustom4gBands: (Set<Int>) -> Unit = {},
+    onUpdateCustom5gBands: (Set<Int>) -> Unit = {},
+    onUpdateHistoryRetention: (HistoryRetention) -> Unit = {},
+    onClearHistory: () -> Unit = {},
     onWidgetConfigChanged: (WidgetConfig) -> Unit,
     onRouterCredentialsChanged: (RouterCredentials) -> Unit = {},
     onTestRouterLogin: (RouterCredentials) -> Unit = {},
@@ -82,238 +101,298 @@ fun DashboardScreen(
     onUnlock5gCell: () -> Unit = {},
     onClearRadioMessage: () -> Unit = {}
 ) {
-    var showWidgetSheet by remember { mutableStateOf(false) }
-    var selected5gMetric by remember { mutableStateOf(ChartMetric.RSRQ) }
-    var selected4gMetric by remember { mutableStateOf(ChartMetric.RSRQ) }
+    val activeNavTab = DashboardNavTab.entries.getOrElse(uiState.selectedTab) { DashboardNavTab.MONITOR }
+    var settingsSubTab by rememberSaveable { mutableIntStateOf(0) }
+    val selected5gMetric = ChartMetric.entries.firstOrNull { it.name == uiState.selected5gMetric } ?: ChartMetric.SINR
+    val selected4gMetric = ChartMetric.entries.firstOrNull { it.name == uiState.selected4gMetric } ?: ChartMetric.SINR
+
+    val isConnected = uiState.signalState.isConnected && uiState.signalState.errorMessage == null
+    val isDark = isSystemInDarkTheme()
+    val onlineDotColor = if (isDark) SignalExcellent else SignalExcellentLight
 
     Scaffold(
-        containerColor = BgBase
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                ),
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (isConnected) Icons.Default.Router else Icons.Default.WifiOff,
+                            contentDescription = null,
+                            tint = if (isConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "ZTE MC7500",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = if (isConnected) {
+                                    "Terhubung (${uiState.routerCredentials.host})"
+                                } else {
+                                    "ODU Terputus (${uiState.routerCredentials.host})"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isConnected) onlineDotColor else MaterialTheme.colorScheme.error,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                },
+                actions = {
+                    FilledTonalIconButton(
+                        onClick = onRefresh,
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .size(48.dp)
+                    ) {
+                        if (uiState.isRefreshing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Muat Ulang Telemetri",
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+                }
+            )
+        },
+        bottomBar = {
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer
+            ) {
+                NavigationBarItem(
+                    selected = activeNavTab == DashboardNavTab.MONITOR,
+                    onClick = { onSelectTab(DashboardNavTab.MONITOR.ordinal) },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.SignalCellularAlt,
+                            contentDescription = DashboardNavTab.MONITOR.label
+                        )
+                    },
+                    label = { Text(DashboardNavTab.MONITOR.label) }
+                )
+                NavigationBarItem(
+                    selected = activeNavTab == DashboardNavTab.RADIO,
+                    onClick = { onSelectTab(DashboardNavTab.RADIO.ordinal) },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.SettingsInputAntenna,
+                            contentDescription = DashboardNavTab.RADIO.label
+                        )
+                    },
+                    label = { Text(DashboardNavTab.RADIO.label) }
+                )
+                NavigationBarItem(
+                    selected = activeNavTab == DashboardNavTab.SETTINGS,
+                    onClick = { onSelectTab(DashboardNavTab.SETTINGS.ordinal) },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Default.Tune,
+                            contentDescription = DashboardNavTab.SETTINGS.label
+                        )
+                    },
+                    label = { Text(DashboardNavTab.SETTINGS.label) }
+                )
+            }
+        }
     ) { innerPadding ->
-        Column(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .background(BgBase)
-                .statusBarsPadding()
-                .padding(horizontal = 16.dp)
         ) {
-            Spacer(modifier = Modifier.height(12.dp))
+            val isExpandedWidth = maxWidth >= 600.dp
+            val horizontalPad = if (isExpandedWidth) 24.dp else 14.dp
 
-            // Precision Telecom Header
-            HeaderSection(
-                isRefreshing = uiState.isRefreshing,
-                pollingInterval = uiState.pollingIntervalMs,
-                onRefresh = onRefresh,
-                onPollingIntervalSelected = onPollingIntervalSelected,
-                onOpenWidgetSettings = { showWidgetSheet = true }
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Scrollable Telemetry Cards
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-            ) {
-                // Connection & Tower Status Banner
-                ConnectionStatusBanner(
-                    signal = uiState.signalState,
-                    errorMessage = uiState.signalState.errorMessage
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Router System & Live Bandwidth Telemetry Card
-                RouterTrafficCard(
-                    signal = uiState.signalState,
-                    history = uiState.signalHistory,
-                    onOpenSettings = { showWidgetSheet = true }
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // 5G NR Telemetry & Real-Time Trend Card
-                SignalTechCard(
-                    title = "5G NR",
-                    band = uiState.signalState.nrBand,
-                    rsrp = uiState.signalState.nrRsrp,
-                    sinr = uiState.signalState.nrSinr,
-                    rsrq = uiState.signalState.nrRsrq,
-                    pci = uiState.signalState.nrPci,
-                    cellId = uiState.signalState.nrCellId,
-                    earfcnOrArfcn = uiState.signalState.nrArfcn,
-                    dlFreqMhz = uiState.signalState.nrDlFreqMhz,
-                    bandwidth = uiState.signalState.nrBandwidth,
-                    history = uiState.signalHistory,
-                    selectedMetric = selected5gMetric,
-                    onMetricSelected = { selected5gMetric = it },
-                    is5g = true
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // 4G LTE Telemetry & Real-Time Trend Card
-                SignalTechCard(
-                    title = "4G LTE",
-                    band = uiState.signalState.lteBand,
-                    rsrp = uiState.signalState.lteRsrp,
-                    sinr = uiState.signalState.lteSinr,
-                    rsrq = uiState.signalState.lteRsrq,
-                    pci = uiState.signalState.ltePci,
-                    cellId = uiState.signalState.lteCellId,
-                    earfcnOrArfcn = uiState.signalState.lteEarfcn,
-                    dlFreqMhz = uiState.signalState.lteDlFreqMhz,
-                    bandwidth = uiState.signalState.lteBandwidth,
-                    history = uiState.signalHistory,
-                    selectedMetric = selected4gMetric,
-                    onMetricSelected = { selected4gMetric = it },
-                    is5g = false
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Carrier Aggregation & Tower Matrix Card
-                CarrierAggregationCard(signal = uiState.signalState)
-
-                Spacer(modifier = Modifier.height(24.dp))
-            }
-        }
-    }
-
-    // Modal Bottom Sheet for Widget, Router & Notification Configuration
-    if (showWidgetSheet) {
-        SettingsBottomSheet(
-            config = uiState.widgetConfig,
-            routerCreds = uiState.routerCredentials,
-            notifConfig = uiState.notificationConfig,
-            signalState = uiState.signalState,
-            isTestingLogin = uiState.isTestingLogin,
-            loginStatusMessage = uiState.loginStatusMessage,
-            isExecutingRadioCommand = uiState.isExecutingRadioCommand,
-            radioCommandMessage = uiState.radioCommandMessage,
-            onConfigChanged = onWidgetConfigChanged,
-            onRouterCredentialsChanged = onRouterCredentialsChanged,
-            onTestLogin = onTestRouterLogin,
-            onNotificationConfigChanged = onNotificationConfigChanged,
-            onSetNetworkSelect = onSetNetworkSelect,
-            onSet4gBandLock = onSet4gBandLock,
-            onSet5gBandLock = onSet5gBandLock,
-            onLock4gCell = onLock4gCell,
-            onUnlock4gCell = onUnlock4gCell,
-            onLock5gCell = onLock5gCell,
-            onUnlock5gCell = onUnlock5gCell,
-            onClearRadioMessage = onClearRadioMessage,
-            onDismiss = { showWidgetSheet = false }
-        )
-    }
-}
-
-@Composable
-fun HeaderSection(
-    isRefreshing: Boolean,
-    pollingInterval: Long,
-    onRefresh: () -> Unit,
-    onPollingIntervalSelected: (Long) -> Unit,
-    onOpenWidgetSettings: () -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // App Title & Utility Tag
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.Router,
-                    contentDescription = null,
-                    tint = AccentPrimary,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "ZTE MC7500",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
-                )
-            }
-            Text(
-                text = "Telemetri Sinyal & Monitor Antena",
-                style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary
-            )
-        }
-
-        // Actions: Interval Selector & Quick Buttons
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            // Polling interval selector chips
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(SurfaceCard)
-                    .border(1.dp, BorderSubtle, RoundedCornerShape(8.dp))
-                    .padding(2.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                listOf(1000L to "1s", 3000L to "3s", 5000L to "5s").forEach { (ms, label) ->
-                    val isSelected = pollingInterval == ms
-                    Box(
+            when (activeNavTab) {
+                DashboardNavTab.MONITOR -> {
+                    Column(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(if (isSelected) AccentPrimary.copy(alpha = 0.18f) else Color.Transparent)
-                            .clickable { onPollingIntervalSelected(ms) }
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        contentAlignment = Alignment.Center
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = horizontalPad, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text(
-                            text = label,
-                            fontSize = 11.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSelected) AccentPrimary else TextSecondary
+                        ConnectionStatusBanner(
+                            signal = uiState.signalState,
+                            routerHost = uiState.routerCredentials.host,
+                            pollingInterval = uiState.pollingIntervalMs,
+                            chartTimeRange = uiState.chartTimeRange,
+                            isRefreshing = uiState.isRefreshing,
+                            onPollingIntervalSelected = onPollingIntervalSelected,
+                            onChartTimeRangeSelected = onChartTimeRangeSelected,
+                            onRefresh = onRefresh,
+                            onOpenRouterSettings = {
+                                settingsSubTab = 0
+                                onSelectTab(DashboardNavTab.SETTINGS.ordinal)
+                            }
                         )
+
+                        RouterTrafficCard(
+                            signal = uiState.signalState,
+                            history = uiState.signalHistory,
+                            chartTimeRange = uiState.chartTimeRange,
+                            isExpandedWidth = isExpandedWidth,
+                            onOpenSettings = {
+                                settingsSubTab = 0
+                                onSelectTab(DashboardNavTab.SETTINGS.ordinal)
+                            }
+                        )
+
+                        if (isExpandedWidth) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Box(modifier = Modifier.weight(1f)) {
+                                    SignalTechCard(
+                                        title = "5G NR",
+                                        isConnected = isConnected,
+                                        band = uiState.signalState.nrBand,
+                                        rsrp = uiState.signalState.nrRsrp,
+                                        sinr = uiState.signalState.nrSinr,
+                                        rsrq = uiState.signalState.nrRsrq,
+                                        pci = uiState.signalState.nrPci,
+                                        cellId = uiState.signalState.nrCellId,
+                                        earfcnOrArfcn = uiState.signalState.nrArfcn,
+                                        dlFreqMhz = uiState.signalState.nrDlFreqMhz,
+                                        bandwidth = uiState.signalState.nrBandwidth,
+                                        history = uiState.signalHistory,
+                                        chartTimeRange = uiState.chartTimeRange,
+                                        selectedMetric = selected5gMetric,
+                                        onMetricSelected = { onSelect5gMetric(it.name) },
+                                        is5g = true
+                                    )
+                                }
+                                Box(modifier = Modifier.weight(1f)) {
+                                    SignalTechCard(
+                                        title = "4G LTE",
+                                        isConnected = isConnected,
+                                        band = uiState.signalState.lteBand,
+                                        rsrp = uiState.signalState.lteRsrp,
+                                        sinr = uiState.signalState.lteSinr,
+                                        rsrq = uiState.signalState.lteRsrq,
+                                        pci = uiState.signalState.ltePci,
+                                        cellId = uiState.signalState.lteCellId,
+                                        earfcnOrArfcn = uiState.signalState.lteEarfcn,
+                                        dlFreqMhz = uiState.signalState.lteDlFreqMhz,
+                                        bandwidth = uiState.signalState.lteBandwidth,
+                                        history = uiState.signalHistory,
+                                        chartTimeRange = uiState.chartTimeRange,
+                                        selectedMetric = selected4gMetric,
+                                        onMetricSelected = { onSelect4gMetric(it.name) },
+                                        is5g = false
+                                    )
+                                }
+                            }
+                        } else {
+                            SignalTechCard(
+                                title = "5G NR",
+                                isConnected = isConnected,
+                                band = uiState.signalState.nrBand,
+                                rsrp = uiState.signalState.nrRsrp,
+                                sinr = uiState.signalState.nrSinr,
+                                rsrq = uiState.signalState.nrRsrq,
+                                pci = uiState.signalState.nrPci,
+                                cellId = uiState.signalState.nrCellId,
+                                earfcnOrArfcn = uiState.signalState.nrArfcn,
+                                dlFreqMhz = uiState.signalState.nrDlFreqMhz,
+                                bandwidth = uiState.signalState.nrBandwidth,
+                                history = uiState.signalHistory,
+                                chartTimeRange = uiState.chartTimeRange,
+                                selectedMetric = selected5gMetric,
+                                onMetricSelected = { onSelect5gMetric(it.name) },
+                                is5g = true
+                            )
+
+                            SignalTechCard(
+                                title = "4G LTE",
+                                isConnected = isConnected,
+                                band = uiState.signalState.lteBand,
+                                rsrp = uiState.signalState.lteRsrp,
+                                sinr = uiState.signalState.lteSinr,
+                                rsrq = uiState.signalState.lteRsrq,
+                                pci = uiState.signalState.ltePci,
+                                cellId = uiState.signalState.lteCellId,
+                                earfcnOrArfcn = uiState.signalState.lteEarfcn,
+                                dlFreqMhz = uiState.signalState.lteDlFreqMhz,
+                                bandwidth = uiState.signalState.lteBandwidth,
+                                history = uiState.signalHistory,
+                                chartTimeRange = uiState.chartTimeRange,
+                                selectedMetric = selected4gMetric,
+                                onMetricSelected = { onSelect4gMetric(it.name) },
+                                is5g = false
+                            )
+                        }
+
+                        CarrierAggregationCard(signal = uiState.signalState)
+
+                        Spacer(modifier = Modifier.height(16.dp))
                     }
                 }
-            }
 
-            // Refresh Button
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(SurfaceCard)
-                    .border(1.dp, BorderSubtle, RoundedCornerShape(8.dp))
-                    .clickable { onRefresh() },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = "Muat Ulang",
-                    tint = if (isRefreshing) AccentPrimary else TextSecondary,
-                    modifier = Modifier.size(17.dp)
-                )
-            }
+                DashboardNavTab.RADIO -> {
+                    RadioControlScreen(
+                        signalState = uiState.signalState,
+                        horizontalPad = horizontalPad,
+                        isExecutingRadioCommand = uiState.isExecutingRadioCommand,
+                        radioCommandMessage = uiState.radioCommandMessage,
+                        custom4gBands = uiState.custom4gBands,
+                        custom5gBands = uiState.custom5gBands,
+                        onUpdateCustom4gBands = onUpdateCustom4gBands,
+                        onUpdateCustom5gBands = onUpdateCustom5gBands,
+                        onSetNetworkSelect = onSetNetworkSelect,
+                        onSet4gBandLock = onSet4gBandLock,
+                        onSet5gBandLock = onSet5gBandLock,
+                        onLock4gCell = onLock4gCell,
+                        onUnlock4gCell = onUnlock4gCell,
+                        onLock5gCell = onLock5gCell,
+                        onUnlock5gCell = onUnlock5gCell,
+                        onClearRadioMessage = onClearRadioMessage,
+                        onGoToRouterLogin = {
+                            settingsSubTab = 0
+                            onSelectTab(DashboardNavTab.SETTINGS.ordinal)
+                        }
+                    )
+                }
 
-            // Widget Settings Button
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(SurfaceCard)
-                    .border(1.dp, BorderSubtle, RoundedCornerShape(8.dp))
-                    .clickable { onOpenWidgetSettings() },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Widgets,
-                    contentDescription = "Pengaturan Widget",
-                    tint = TextSecondary,
-                    modifier = Modifier.size(17.dp)
-                )
+                DashboardNavTab.SETTINGS -> {
+                    SettingsScreenContent(
+                        selectedSubTab = settingsSubTab,
+                        horizontalPad = horizontalPad,
+                        onSubTabSelected = { settingsSubTab = it },
+                        config = uiState.widgetConfig,
+                        routerCreds = uiState.routerCredentials,
+                        notifConfig = uiState.notificationConfig,
+                        historyRetention = uiState.historyRetention,
+                        isTestingLogin = uiState.isTestingLogin,
+                        loginStatusMessage = uiState.loginStatusMessage,
+                        onConfigChanged = onWidgetConfigChanged,
+                        onRouterCredentialsChanged = onRouterCredentialsChanged,
+                        onTestLogin = onTestRouterLogin,
+                        onNotificationConfigChanged = onNotificationConfigChanged,
+                        onHistoryRetentionChanged = onUpdateHistoryRetention,
+                        onClearHistory = onClearHistory
+                    )
+                }
             }
         }
     }
@@ -322,70 +401,264 @@ fun HeaderSection(
 @Composable
 fun ConnectionStatusBanner(
     signal: OduSignalState,
-    errorMessage: String?
+    routerHost: String,
+    pollingInterval: Long,
+    chartTimeRange: ChartTimeRange,
+    isRefreshing: Boolean,
+    onPollingIntervalSelected: (Long) -> Unit,
+    onChartTimeRangeSelected: (ChartTimeRange) -> Unit,
+    onRefresh: () -> Unit,
+    onOpenRouterSettings: () -> Unit
 ) {
-    val isOk = signal.isConnected && errorMessage == null
-    val statusColor = if (isOk) SignalExcellent else SignalPoor
+    val isDark = isSystemInDarkTheme()
+    val isOk = signal.isConnected && signal.errorMessage == null
+    val statusColor = if (isOk) {
+        if (isDark) SignalExcellent else SignalExcellentLight
+    } else {
+        MaterialTheme.colorScheme.error
+    }
+    val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
 
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(SurfaceCard)
-            .border(1.dp, BorderSubtle, RoundedCornerShape(12.dp))
-            .padding(14.dp)
-    ) {
-        Row(
+    if (!isOk) {
+        // Minimalist Utilitarian Pastel Red Alert Card (1dp border, 10dp radius, zero heavy shadow)
+        val offlineBg = if (isDark) Color(0xFF2B1618) else Color(0xFFFDEBEC)
+        val offlineBorder = if (isDark) Color(0xFF5C282B) else Color(0xFFF5C6C8)
+        val offlineText = if (isDark) Color(0xFFFFB4AB) else Color(0xFF9F2F2D)
+
+        Surface(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            shape = RoundedCornerShape(10.dp),
+            color = offlineBg,
+            border = BorderStroke(1.dp, offlineBorder)
         ) {
-            // Status Solid Indicator Dot (no decorative pulse)
-            Box(
+            Column(
                 modifier = Modifier
-                    .size(10.dp)
-                    .clip(CircleShape)
-                    .background(statusColor)
-            )
+                    .fillMaxWidth()
+                    .padding(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(offlineText)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "ODU TERPUTUS",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.8.sp,
+                            color = offlineText
+                        )
+                    }
 
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = if (isOk) signal.provider else "Terputus dari ODU",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "192.168.254.1",
+                        text = "$routerHost • ${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(signal.lastUpdated))}",
                         fontSize = 11.sp,
-                        color = TextMuted
+                        fontFamily = FontFamily.Monospace,
+                        color = offlineText.copy(alpha = 0.85f)
                     )
                 }
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = if (isOk) "${signal.connectionType} • ${signal.signalBar}/5 Bar Sinyal" else (errorMessage ?: "Periksa koneksi Wi-Fi/LAN ke ODU"),
-                    fontSize = 12.sp,
-                    color = if (isOk) TextSecondary else SignalPoor
-                )
-            }
 
-            if (isOk) {
+                Spacer(modifier = Modifier.height(6.dp))
+
                 Text(
-                    text = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(signal.lastUpdated)),
-                    fontSize = 11.sp,
-                    color = TextMuted
+                    text = signal.errorMessage ?: "Tidak dapat menjangkau ZTE MC7500. Periksa koneksi Wi-Fi/LAN ke router.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = offlineText.copy(alpha = 0.9f)
                 )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = onRefresh,
+                        enabled = !isRefreshing,
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = offlineText,
+                            contentColor = if (isDark) Color(0xFF1A1111) else Color.White
+                        ),
+                        shape = RoundedCornerShape(6.dp),
+                        elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp, 0.dp)
+                    ) {
+                        Text(
+                            text = if (isRefreshing) "Menghubungi..." else "Coba Lagi",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    OutlinedButton(
+                        onClick = onOpenRouterSettings,
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = offlineText),
+                        border = BorderStroke(1.dp, offlineBorder),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text("Cek IP Router", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
+            }
+        }
+    } else {
+        // Minimalist Status & Control Strip (1dp border, 10dp radius, compact 2-row layout)
+        val nextInterval = when (pollingInterval) {
+            1000L -> 3000L
+            3000L -> 5000L
+            else -> 1000L
+        }
+        val intervalLabel = "${pollingInterval / 1000}s"
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, borderColor)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(statusColor)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = signal.provider,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = statusColor.copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = "${signal.connectionType} • ${signal.signalBar}/5",
+                                fontSize = 10.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.SemiBold,
+                                color = statusColor,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    // Tap-to-cycle Refresh Rate Pill (>= 44dp touch target)
+                    Surface(
+                        modifier = Modifier
+                            .heightIn(min = 44.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { onPollingIntervalSelected(nextInterval) },
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        border = BorderStroke(1.dp, borderColor)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "REFRESH $intervalLabel",
+                                fontSize = 10.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 0.5.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider(thickness = 1.dp, color = borderColor.copy(alpha = 0.5f))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Single-Row Minimalist Time Range Bar (1m | 5m | 15m | 1j | 6j | 24j) with >=44dp tap targets
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ChartTimeRange.entries.forEach { rangeOption ->
+                        val isSelected = chartTimeRange == rangeOption
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 44.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable { onChartTimeRangeSelected(rangeOption) },
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (isSelected) {
+                                MaterialTheme.colorScheme.onSurface
+                            } else {
+                                Color.Transparent
+                            },
+                            border = if (isSelected) {
+                                null
+                            } else {
+                                BorderStroke(1.dp, borderColor.copy(alpha = 0.6f))
+                            }
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = rangeOption.shortLabel.uppercase(),
+                                    fontSize = 11.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSelected) {
+                                        MaterialTheme.colorScheme.surface
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SignalTechCard(
     title: String,
+    isConnected: Boolean,
     band: String,
     rsrp: Int,
     sinr: Float,
@@ -396,20 +669,22 @@ fun SignalTechCard(
     dlFreqMhz: Float? = null,
     bandwidth: String? = null,
     history: List<OduSignalState>,
+    chartTimeRange: ChartTimeRange,
     selectedMetric: ChartMetric,
     onMetricSelected: (ChartMetric) -> Unit,
     is5g: Boolean
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(SurfaceCard)
-            .border(1.dp, BorderSubtle, RoundedCornerShape(12.dp))
-            .padding(16.dp)
+    val hasValidSignal = isConnected && rsrp != 0
+    val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, borderColor)
     ) {
-        Column {
-            // Card Header: Tech & Band Pill
+        Column(modifier = Modifier.padding(14.dp)) {
+            // Editorial Header Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -417,139 +692,141 @@ fun SignalTechCard(
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    color = TextPrimary
+                    letterSpacing = 0.8.sp,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
 
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(SurfaceCardSubtle)
-                        .border(1.dp, BorderSubtle, RoundedCornerShape(6.dp))
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                ) {
-                    val cleanBand = when {
-                        band.startsWith("LTE BAND ", ignoreCase = true) -> "B" + band.substringAfter("LTE BAND ", "").trim()
-                        band.startsWith("BAND ", ignoreCase = true) -> "B" + band.substringAfter("BAND ", "").trim()
-                        else -> band
-                    }
-                    val freqPart = dlFreqMhz?.let { " • ${it} MHz" } ?: ""
-                    val displayBand = if (cleanBand.isNotBlank() && cleanBand != "-") {
-                        val prefix = if (cleanBand.startsWith("B", true) || cleanBand.startsWith("n", true)) "" else "Band "
+                val cleanBand = when {
+                    band.startsWith("LTE BAND ", ignoreCase = true) -> "B" + band.substringAfter("LTE BAND ", "").trim()
+                    band.startsWith("BAND ", ignoreCase = true) -> "B" + band.substringAfter("BAND ", "").trim()
+                    else -> band
+                }
+                val freqPart = dlFreqMhz?.let { " • ${it.toInt()} MHz" } ?: ""
+                val displayBand = when {
+                    !isConnected -> "OFFLINE"
+                    cleanBand.isNotBlank() && cleanBand != "-" -> {
+                        val prefix = if (cleanBand.startsWith("B", true) || cleanBand.startsWith("n", true)) "" else "B"
                         "$prefix$cleanBand$freqPart"
-                    } else "Siaga"
+                    }
+                    else -> "STANDBY"
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = if (isConnected) {
+                        MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.7f)
+                    } else {
+                        MaterialTheme.colorScheme.errorContainer
+                    }
+                ) {
                     Text(
                         text = displayBand,
                         fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.SemiBold,
-                        color = AccentPrimary
+                        color = if (isConnected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+            HorizontalDivider(thickness = 1.dp, color = borderColor.copy(alpha = 0.5f))
 
-            // High-Glanceability Primary Numeric Metrics (Value-First)
+            // Flat 3-Column Interactive Bento Metric Strip (Tapping any metric switches the chart below; >=56dp height)
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                MetricColumnItem(
-                    label = "Kekuatan (RSRP)",
-                    valueText = "$rsrp dBm",
-                    valueColor = getRsrpColor(rsrp),
-                    modifier = Modifier.weight(1f)
-                )
-                MetricColumnItem(
-                    label = "Kejernihan (SINR)",
-                    valueText = "$sinr dB",
-                    valueColor = getSinrColor(sinr),
-                    modifier = Modifier.weight(1f)
-                )
-                MetricColumnItem(
-                    label = "Kualitas (RSRQ)",
-                    valueText = "$rsrq dB",
-                    valueColor = getRsrqColor(rsrq),
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-            HorizontalDivider(color = BorderSubtle.copy(alpha = 0.5f))
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Chart Header: Metric Switcher Pills
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Tren Kestabilan Real-Time",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = TextSecondary
+                MetricColumnItem(
+                    label = "RSRP",
+                    valueText = if (hasValidSignal) "$rsrp" else "--",
+                    unitText = "dBm",
+                    valueColor = if (hasValidSignal) adaptiveRsrpColor(rsrp) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    isSelected = selectedMetric == ChartMetric.RSRP,
+                    onClick = { onMetricSelected(ChartMetric.RSRP) },
+                    modifier = Modifier.weight(1f)
                 )
 
-                // Metric Selector Pills
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    ChartMetric.values().forEach { metric ->
-                        val isSelected = selectedMetric == metric
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(if (isSelected) AccentPrimary.copy(alpha = 0.16f) else SurfaceCardSubtle)
-                                .border(
-                                    1.dp,
-                                    if (isSelected) AccentPrimary.copy(alpha = 0.8f) else BorderSubtle,
-                                    RoundedCornerShape(6.dp)
-                                )
-                                .clickable { onMetricSelected(metric) }
-                                .padding(horizontal = 7.dp, vertical = 3.dp)
-                        ) {
-                            Text(
-                                text = metric.label,
-                                fontSize = 10.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isSelected) AccentPrimary else TextSecondary
-                            )
-                        }
-                    }
-                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(1.dp)
+                        .background(borderColor.copy(alpha = 0.5f))
+                )
+
+                MetricColumnItem(
+                    label = "SINR",
+                    valueText = if (hasValidSignal) "$sinr" else "--",
+                    unitText = "dB",
+                    valueColor = if (hasValidSignal) adaptiveSinrColor(sinr) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    isSelected = selectedMetric == ChartMetric.SINR,
+                    onClick = { onMetricSelected(ChartMetric.SINR) },
+                    modifier = Modifier.weight(1f)
+                )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(1.dp)
+                        .background(borderColor.copy(alpha = 0.5f))
+                )
+
+                MetricColumnItem(
+                    label = "RSRQ",
+                    valueText = if (hasValidSignal) "$rsrq" else "--",
+                    unitText = "dB",
+                    valueColor = if (hasValidSignal) adaptiveRsrqColor(rsrq) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    isSelected = selectedMetric == ChartMetric.RSRQ,
+                    onClick = { onMetricSelected(ChartMetric.RSRQ) },
+                    modifier = Modifier.weight(1f)
+                )
             }
 
+            HorizontalDivider(thickness = 1.dp, color = borderColor.copy(alpha = 0.5f))
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Real-Time Line Graph Canvas
+            // Minimalist Frameless Sparkline Chart
             SignalLineChart(
                 history = history,
+                isConnected = isConnected,
                 metric = selectedMetric,
+                chartTimeRange = chartTimeRange,
                 is5g = is5g
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
-            HorizontalDivider(color = BorderSubtle.copy(alpha = 0.5f))
             Spacer(modifier = Modifier.height(10.dp))
+            HorizontalDivider(thickness = 1.dp, color = borderColor.copy(alpha = 0.5f))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Secondary Cell Telemetry (Channel, Bandwidth, PCI, Cell ID)
+            // Monospace Technical Metadata Footer
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val chanPrefix = if (is5g) "ARFCN" else "EARFCN"
-                val chanText = earfcnOrArfcn?.let { "$chanPrefix $it" } ?: "$chanPrefix -"
-                val bwText = bandwidth?.let { " • $it" } ?: ""
+                val chanText = if (isConnected && earfcnOrArfcn != null) "$chanPrefix $earfcnOrArfcn" else "$chanPrefix -"
+                val bwText = if (isConnected && bandwidth != null) " • $bandwidth" else ""
                 Text(
                     text = "$chanText$bwText",
                     fontSize = 11.sp,
-                    color = TextSecondary
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "PCI: $pci  •  Sel: ${if (cellId > 0) cellId else "-"}",
+                    text = if (isConnected) {
+                        "PCI ${if (pci > 0) pci else "-"} • CELL ${if (cellId > 0) cellId else "-"}"
+                    } else {
+                        "PCI - • CELL -"
+                    },
                     fontSize = 11.sp,
-                    color = TextSecondary
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -560,213 +837,331 @@ fun SignalTechCard(
 fun MetricColumnItem(
     label: String,
     valueText: String,
+    unitText: String = "",
     valueColor: Color,
+    isSelected: Boolean = false,
+    onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier) {
-        Text(
-            text = valueText,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-            color = valueColor
-        )
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = label,
-            fontSize = 10.sp,
-            color = TextSecondary
-        )
-    }
-}
-
-@Composable
-fun SignalLineChart(
-    history: List<OduSignalState>,
-    metric: ChartMetric,
-    is5g: Boolean
-) {
-    val dataPoints = remember(history, metric, is5g) {
-        history.map { state ->
-            if (is5g) {
-                when (metric) {
-                    ChartMetric.RSRQ -> state.nrRsrq.toFloat()
-                    ChartMetric.RSRP -> state.nrRsrp.toFloat()
-                    ChartMetric.SINR -> state.nrSinr
-                }
-            } else {
-                when (metric) {
-                    ChartMetric.RSRQ -> state.lteRsrq.toFloat()
-                    ChartMetric.RSRP -> state.lteRsrp.toFloat()
-                    ChartMetric.SINR -> state.lteSinr
-                }
-            }
-        }
-    }
-
-    if (dataPoints.isEmpty()) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(84.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(SurfaceCardSubtle.copy(alpha = 0.4f)),
-            contentAlignment = Alignment.Center
+    Column(
+        modifier = modifier
+            .heightIn(min = 58.dp)
+            .let { if (onClick != null) it.clickable(onClick = onClick) else it }
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.Start,
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Mengumpulkan telemetri...",
-                fontSize = 11.sp,
-                color = TextMuted
+                text = label,
+                fontSize = 10.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                letterSpacing = 0.8.sp,
+                color = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
             )
-        }
-        return
-    }
-
-    val minVal = dataPoints.minOrNull() ?: 0f
-    val maxVal = dataPoints.maxOrNull() ?: 0f
-    val currentVal = dataPoints.last()
-
-    val metricColor = when (metric) {
-        ChartMetric.RSRQ -> getRsrqColor(currentVal.toInt())
-        ChartMetric.RSRP -> getRsrpColor(currentVal.toInt())
-        ChartMetric.SINR -> getSinrColor(currentVal)
-    }
-
-    Column {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(84.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(SurfaceCardSubtle.copy(alpha = 0.35f))
-                .border(1.dp, BorderSubtle.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                .padding(horizontal = 8.dp, vertical = 6.dp)
-        ) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val width = size.width
-                val height = size.height
-
-                val range = (maxVal - minVal).coerceAtLeast(1.5f)
-                val yMin = minVal - (range * 0.15f)
-                val yMax = maxVal + (range * 0.15f)
-                val totalYSpan = (yMax - yMin).coerceAtLeast(1f)
-
-                // 3 Subtle horizontal grid lines
-                val gridAlpha = 0.18f
-                drawLine(
-                    color = BorderSubtle.copy(alpha = gridAlpha),
-                    start = Offset(0f, 0f),
-                    end = Offset(width, 0f),
-                    strokeWidth = 1f
-                )
-                drawLine(
-                    color = BorderSubtle.copy(alpha = gridAlpha),
-                    start = Offset(0f, height / 2),
-                    end = Offset(width, height / 2),
-                    strokeWidth = 1f
-                )
-                drawLine(
-                    color = BorderSubtle.copy(alpha = gridAlpha),
-                    start = Offset(0f, height),
-                    end = Offset(width, height),
-                    strokeWidth = 1f
-                )
-
-                val points = dataPoints.mapIndexed { index, value ->
-                    val x = if (dataPoints.size > 1) {
-                        (index.toFloat() / (dataPoints.size - 1)) * width
-                    } else {
-                        width
-                    }
-                    val normalizedY = ((value - yMin) / totalYSpan).coerceIn(0f, 1f)
-                    val y = height - (normalizedY * height)
-                    Offset(x, y)
-                }
-
-                if (points.size == 1) {
-                    val p = points.first()
-                    drawCircle(color = metricColor, radius = 4.dp.toPx(), center = p)
-                    return@Canvas
-                }
-
-                // Construct path for the line
-                val strokePath = Path().apply {
-                    moveTo(points.first().x, points.first().y)
-                    for (i in 1 until points.size) {
-                        val prev = points[i - 1]
-                        val curr = points[i]
-                        val midX = (prev.x + curr.x) / 2
-                        cubicTo(midX, prev.y, midX, curr.y, curr.x, curr.y)
-                    }
-                }
-
-                // Area fill path underneath line
-                val fillPath = Path().apply {
-                    addPath(strokePath)
-                    lineTo(points.last().x, height)
-                    lineTo(points.first().x, height)
-                    close()
-                }
-
-                // Draw gradient area
-                drawPath(
-                    path = fillPath,
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            metricColor.copy(alpha = 0.22f),
-                            metricColor.copy(alpha = 0.02f)
-                        ),
-                        startY = 0f,
-                        endY = height
-                    )
-                )
-
-                // Draw stroke
-                drawPath(
-                    path = strokePath,
-                    color = metricColor,
-                    style = Stroke(
-                        width = 2.dp.toPx(),
-                        cap = StrokeCap.Round,
-                        join = StrokeJoin.Round
-                    )
-                )
-
-                // Highlight latest point with a precise dot
-                val latestPoint = points.last()
-                drawCircle(
-                    color = metricColor,
-                    radius = 4.dp.toPx(),
-                    center = latestPoint
-                )
-                drawCircle(
-                    color = BgBase,
-                    radius = 2.dp.toPx(),
-                    center = latestPoint
+            if (isSelected) {
+                Box(
+                    modifier = Modifier
+                        .size(5.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onSurface)
                 )
             }
         }
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        // Axis Bounds & Sample Counter
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                text = valueText,
+                fontSize = 20.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                color = valueColor,
+                maxLines = 1
+            )
+            if (unitText.isNotEmpty()) {
+                Spacer(modifier = Modifier.width(3.dp))
+                Text(
+                    text = unitText,
+                    fontSize = 10.sp,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 2.dp)
+                )
+            }
+        }
+    }
+}
+
+private data class TimedMetricPoint(
+    val timestampMs: Long,
+    val value: Float
+)
+
+@Composable
+fun SignalLineChart(
+    history: List<OduSignalState>,
+    isConnected: Boolean,
+    metric: ChartMetric,
+    chartTimeRange: ChartTimeRange = ChartTimeRange.FIVE_MINUTES,
+    is5g: Boolean
+) {
+    val isDark = isSystemInDarkTheme()
+    val outlineColor = MaterialTheme.colorScheme.outlineVariant
+    val dotCenterColor = MaterialTheme.colorScheme.surface
+
+    val timedPoints = remember(history, metric, is5g, isConnected) {
+        if (!isConnected) {
+            emptyList()
+        } else {
+            history.mapNotNull { state ->
+                val raw = if (is5g) {
+                    when (metric) {
+                        ChartMetric.RSRQ -> state.nrRsrq.toFloat()
+                        ChartMetric.RSRP -> state.nrRsrp.toFloat()
+                        ChartMetric.SINR -> state.nrSinr
+                    }
+                } else {
+                    when (metric) {
+                        ChartMetric.RSRQ -> state.lteRsrq.toFloat()
+                        ChartMetric.RSRP -> state.lteRsrp.toFloat()
+                        ChartMetric.SINR -> state.lteSinr
+                    }
+                }
+                // Filter out invalid 0 dBm RSRP readings so they never spike the chart to 0
+                if (metric == ChartMetric.RSRP && raw == 0f) {
+                    null
+                } else {
+                    TimedMetricPoint(state.lastUpdated, raw)
+                }
+            }
+        }
+    }
+
+    if (timedPoints.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(72.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = if (!isConnected) "OFFLINE — GRAFIK DIJEDA" else "MENGUMPULKAN DATA...",
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace,
+                letterSpacing = 0.8.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        return
+    }
+
+    val minVal = timedPoints.minOf { it.value }
+    val maxVal = timedPoints.maxOf { it.value }
+    val avgVal = timedPoints.map { it.value.toDouble() }.average().toFloat()
+    val currentVal = timedPoints.last().value
+
+    // Ratcheted Y-Axis: locks scale and only expands when a new reading exceeds the current bounds
+    var lockedYMin by remember(chartTimeRange, metric, is5g) { mutableFloatStateOf(Float.NaN) }
+    var lockedYMax by remember(chartTimeRange, metric, is5g) { mutableFloatStateOf(Float.NaN) }
+
+    val minSpan = if (metric == ChartMetric.RSRQ) 12f else 16f
+    if (lockedYMin.isNaN() || lockedYMax.isNaN()) {
+        val mid = (minVal + maxVal) / 2f
+        val halfSpan = maxOf((maxVal - minVal) * 0.65f, minSpan / 2f)
+        lockedYMin = kotlin.math.floor(mid - halfSpan)
+        lockedYMax = kotlin.math.ceil(mid + halfSpan)
+    } else {
+        if (minVal < lockedYMin + 1f) {
+            lockedYMin = kotlin.math.floor(minVal - 2f)
+        }
+        if (maxVal > lockedYMax - 1f) {
+            lockedYMax = kotlin.math.ceil(maxVal + 2f)
+        }
+    }
+
+    val yMin = lockedYMin
+    val yMax = lockedYMax
+    val totalYSpan = (yMax - yMin).coerceAtLeast(minSpan)
+
+    val metricColor = when (metric) {
+        ChartMetric.RSRQ -> getRsrqColor(currentVal.toInt(), isDark)
+        ChartMetric.RSRP -> getRsrpColor(currentVal.toInt(), isDark)
+        ChartMetric.SINR -> getSinrColor(currentVal, isDark)
+    }
+
+    val windowEndMs = timedPoints.last().timestampMs
+    val windowDurationMs = chartTimeRange.durationMillis.coerceAtLeast(1000L)
+    val windowStartMs = windowEndMs - windowDurationMs
+    // Break line if there is an offline gap larger than 4 buckets (or at least 15s)
+    val maxGapMs = maxOf((windowDurationMs / 60L) * 4L, 15_000L)
+
+    Column {
+        // Y-Axis Ceiling & Timeline Start Indicator
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = "Min: ${minVal.toInt()} ${metric.unit}",
-                fontSize = 10.sp,
-                color = TextMuted
+                text = "-${chartTimeRange.shortLabel.uppercase()}",
+                fontSize = 9.sp,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
             Text(
-                text = "${dataPoints.size} sampel terbaru",
-                fontSize = 10.sp,
-                color = TextMuted
+                text = "SKALA ${yMin.toInt()}..${yMax.toInt()} ${metric.unit}",
+                fontSize = 9.sp,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
             Text(
-                text = "Max: ${maxVal.toInt()} ${metric.unit}",
+                text = "0s",
+                fontSize = 9.sp,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(68.dp)
+                .padding(vertical = 4.dp)
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val width = size.width
+                val height = size.height
+
+                val gridColor = outlineColor.copy(alpha = 0.35f)
+                drawLine(
+                    color = gridColor,
+                    start = Offset(0f, 0f),
+                    end = Offset(width, 0f),
+                    strokeWidth = 1f
+                )
+                drawLine(
+                    color = gridColor,
+                    start = Offset(0f, height / 2f),
+                    end = Offset(width, height / 2f),
+                    strokeWidth = 1f
+                )
+                drawLine(
+                    color = gridColor,
+                    start = Offset(0f, height),
+                    end = Offset(width, height),
+                    strokeWidth = 1f
+                )
+
+                // Map each point to its true proportional timestamp coordinate on [windowStartMs..windowEndMs]
+                val mappedPoints = timedPoints.map { pt ->
+                    val timeFraction = ((pt.timestampMs - windowStartMs).toFloat() / windowDurationMs.toFloat()).coerceIn(0f, 1f)
+                    val x = timeFraction * width
+                    val normalizedY = ((pt.value - yMin) / totalYSpan).coerceIn(0f, 1f)
+                    val y = height - (normalizedY * height)
+                    Pair(pt.timestampMs, Offset(x, y))
+                }
+
+                if (mappedPoints.size == 1) {
+                    val p = mappedPoints.first().second
+                    drawCircle(color = metricColor, radius = 3.5.dp.toPx(), center = p)
+                    return@Canvas
+                }
+
+                // Build contiguous segments (breaking across offline gaps) using exact linear segments
+                val strokePath = Path()
+                val fillPath = Path()
+                var segmentStartX = mappedPoints.first().second.x
+
+                strokePath.moveTo(mappedPoints.first().second.x, mappedPoints.first().second.y)
+                fillPath.moveTo(mappedPoints.first().second.x, height)
+                fillPath.lineTo(mappedPoints.first().second.x, mappedPoints.first().second.y)
+
+                for (i in 1 until mappedPoints.size) {
+                    val prev = mappedPoints[i - 1]
+                    val curr = mappedPoints[i]
+                    if (curr.first - prev.first > maxGapMs) {
+                        fillPath.lineTo(prev.second.x, height)
+                        fillPath.lineTo(segmentStartX, height)
+                        fillPath.close()
+
+                        segmentStartX = curr.second.x
+                        strokePath.moveTo(curr.second.x, curr.second.y)
+                        fillPath.moveTo(curr.second.x, height)
+                        fillPath.lineTo(curr.second.x, curr.second.y)
+                    } else {
+                        strokePath.lineTo(curr.second.x, curr.second.y)
+                        fillPath.lineTo(curr.second.x, curr.second.y)
+                    }
+                }
+
+                fillPath.lineTo(mappedPoints.last().second.x, height)
+                fillPath.lineTo(segmentStartX, height)
+                fillPath.close()
+
+                drawPath(
+                    path = fillPath,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            metricColor.copy(alpha = 0.16f),
+                            metricColor.copy(alpha = 0.0f)
+                        ),
+                        startY = 0f,
+                        endY = height
+                    )
+                )
+
+                drawPath(
+                    path = strokePath,
+                    color = metricColor,
+                    style = Stroke(
+                        width = 1.75.dp.toPx(),
+                        cap = StrokeCap.Round,
+                        join = StrokeJoin.Round
+                    )
+                )
+
+                val latestPoint = mappedPoints.last().second
+                drawCircle(
+                    color = metricColor,
+                    radius = 3.5.dp.toPx(),
+                    center = latestPoint
+                )
+                drawCircle(
+                    color = dotCenterColor,
+                    radius = 1.5.dp.toPx(),
+                    center = latestPoint
+                )
+            }
+        }
+
+        val avgFormatted = if (metric == ChartMetric.SINR) {
+            String.format(Locale.US, "%.1f", avgVal)
+        } else {
+            avgVal.toInt().toString()
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "${metric.label} (${chartTimeRange.shortLabel.uppercase()})",
                 fontSize = 10.sp,
-                color = TextMuted
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = "MIN ${minVal.toInt()} • AVG $avgFormatted • MAX ${maxVal.toInt()} ${metric.unit}",
+                fontSize = 10.sp,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -774,64 +1169,70 @@ fun SignalLineChart(
 
 @Composable
 fun CarrierAggregationCard(signal: OduSignalState) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(SurfaceCard)
-            .border(1.dp, BorderSubtle, RoundedCornerShape(12.dp))
-            .padding(16.dp)
+    val isDark = isSystemInDarkTheme()
+    val activeColor = if (isDark) SignalExcellent else SignalExcellentLight
+    val isConnected = signal.isConnected
+    val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, borderColor)
     ) {
-        Column {
+        Column(modifier = Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Penggabungan Frekuensi (CA)",
-                    style = MaterialTheme.typography.titleSmall,
+                    text = "CARRIER AGGREGATION",
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
-                    color = TextPrimary
+                    letterSpacing = 0.8.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
                 )
 
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(if (signal.isCaActive) SignalExcellent.copy(alpha = 0.15f) else SurfaceCardSubtle)
-                        .border(
-                            1.dp,
-                            if (signal.isCaActive) SignalExcellent.copy(alpha = 0.5f) else BorderSubtle,
-                            RoundedCornerShape(6.dp)
-                        )
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = if (isConnected && signal.isCaActive) activeColor.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f)
                 ) {
                     Text(
-                        text = if (signal.isCaActive) "AKTIF (Koneksi Ganda)" else "Tidak Aktif",
+                        text = when {
+                            !isConnected -> "OFFLINE"
+                            signal.isCaActive -> "ACTIVE"
+                            else -> "INACTIVE"
+                        },
                         fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
-                        color = if (signal.isCaActive) SignalExcellent else TextMuted
+                        color = if (isConnected && signal.isCaActive) activeColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
                     )
                 }
             }
 
-            if (signal.isCaActive && signal.caDetails != "-") {
-                Spacer(modifier = Modifier.height(8.dp))
+            if (isConnected && signal.isCaActive && signal.caDetails != "-") {
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = signal.caDetails,
-                    fontSize = 12.sp,
-                    color = TextSecondary
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-            HorizontalDivider(color = BorderSubtle.copy(alpha = 0.5f))
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider(thickness = 1.dp, color = borderColor.copy(alpha = 0.5f))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Pemancar Sekitar: ${signal.neighborCells}",
+                text = if (isConnected) "NEIGHBOR CELLS: ${signal.neighborCells}" else "NEIGHBOR CELLS: -",
                 fontSize = 11.sp,
-                color = TextSecondary
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -841,189 +1242,183 @@ fun CarrierAggregationCard(signal: OduSignalState) {
 fun RouterTrafficCard(
     signal: OduSignalState,
     history: List<OduSignalState>,
+    chartTimeRange: ChartTimeRange,
+    isExpandedWidth: Boolean,
     onOpenSettings: () -> Unit
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(SurfaceCard)
-            .border(1.dp, BorderSubtle, RoundedCornerShape(16.dp))
-            .padding(16.dp)
+    val isDark = isSystemInDarkTheme()
+    val ulColor = if (isDark) SignalExcellent else SignalExcellentLight
+    val isConnected = signal.isConnected
+    val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, borderColor)
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            // Header: Device & Auth Status
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp)
+        ) {
+            // Minimalist Gateway Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Router,
-                        contentDescription = "Router",
-                        tint = AccentPrimary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "ZTE MC7500 GATEWAY",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary,
-                        letterSpacing = 0.5.sp
-                    )
-                }
+                Text(
+                    text = "THROUGHPUT & GATEWAY",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.8.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
 
-                Box(
+                Surface(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (signal.isRouterLoggedIn) SignalExcellent.copy(alpha = 0.12f) else SurfaceCardSubtle)
-                        .border(
-                            1.dp,
-                            if (signal.isRouterLoggedIn) SignalExcellent.copy(alpha = 0.3f) else BorderSubtle,
-                            RoundedCornerShape(12.dp)
-                        )
-                        .clickable { onOpenSettings() }
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                        .heightIn(min = 44.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .clickable(onClick = onOpenSettings),
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    border = BorderStroke(1.dp, borderColor)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Box(
                             modifier = Modifier
                                 .size(6.dp)
                                 .clip(CircleShape)
-                                .background(if (signal.isRouterLoggedIn) SignalExcellent else TextMuted)
+                                .background(
+                                    when {
+                                        !isConnected -> MaterialTheme.colorScheme.error
+                                        signal.isRouterLoggedIn -> ulColor
+                                        else -> MaterialTheme.colorScheme.outline
+                                    }
+                                )
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (signal.isRouterLoggedIn) "Admin Aktif" else "Tamu (RF)",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = if (signal.isRouterLoggedIn) SignalExcellent else TextSecondary
+                            text = when {
+                                !isConnected -> "OFFLINE"
+                                signal.isRouterLoggedIn -> "ADMIN"
+                                else -> "GUEST RF"
+                            },
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider(thickness = 1.dp, color = borderColor.copy(alpha = 0.5f))
 
-            // Speed Rates Row
+            // Flat 2-Column Hero Speed Strip
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(SurfaceCardSubtle)
-                    .padding(12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                    .height(IntrinsicSize.Min),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(vertical = 10.dp, horizontal = 4.dp)
+                ) {
                     Text(
-                        text = "UNDUH REAL-TIME",
+                        text = "↓ DOWNLOAD",
                         fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextMuted,
-                        letterSpacing = 0.5.sp
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.8.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "↓ ${formatSpeed(signal.downloadSpeedBps)}",
-                        fontSize = 18.sp,
+                        text = if (isConnected) formatSpeed(signal.downloadSpeedBps) else "-- Mbps",
+                        fontSize = 20.sp,
+                        fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
-                        color = AccentPrimary
+                        color = if (isConnected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
                 Box(
                     modifier = Modifier
-                        .height(30.dp)
+                        .fillMaxHeight()
                         .width(1.dp)
-                        .background(BorderSubtle)
+                        .background(borderColor.copy(alpha = 0.5f))
                 )
 
                 Column(
                     modifier = Modifier
                         .weight(1f)
+                        .padding(vertical = 10.dp)
                         .padding(start = 12.dp)
                 ) {
                     Text(
-                        text = "UNGGAH REAL-TIME",
+                        text = "↑ UPLOAD",
                         fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextMuted,
-                        letterSpacing = 0.5.sp
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.8.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "↑ ${formatSpeed(signal.uploadSpeedBps)}",
-                        fontSize = 18.sp,
+                        text = if (isConnected) formatSpeed(signal.uploadSpeedBps) else "-- Mbps",
+                        fontSize = 20.sp,
+                        fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
-                        color = SignalExcellent
+                        color = if (isConnected) ulColor else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            HorizontalDivider(thickness = 1.dp, color = borderColor.copy(alpha = 0.5f))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // Dual-Line Real-Time Throughput Trend Chart
-            ThroughputTrendChart(history = history)
+            ThroughputTrendChart(
+                history = history,
+                chartTimeRange = chartTimeRange,
+                isConnected = isConnected
+            )
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+            HorizontalDivider(thickness = 1.dp, color = borderColor.copy(alpha = 0.5f))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // Sub-metrics Grid (Identitas SIM/IP, Statistik Kuota, Kondisi Gateway)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                RouterMetricItem(
-                    label = "WAN IP",
-                    value = signal.wanIp ?: "-",
-                    modifier = Modifier.weight(1f)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                RouterMetricItem(
-                    label = "NO. TELEPON SIM",
-                    value = signal.simPhoneNumber ?: "-",
-                    modifier = Modifier.weight(1f)
-                )
-            }
+            // Flat Bento Grid for Device Telemetry (3 columns on phone & tablet, compact monospace)
+            val metrics = listOf(
+                "WAN IP" to (if (isConnected) (signal.wanIp ?: "-") else "-"),
+                "SIM NO" to (if (isConnected) (signal.simPhoneNumber ?: "-") else "-"),
+                "CPU TEMP" to (if (isConnected) (signal.cpuTemp ?: "Normal") else "-"),
+                "TODAY" to (if (isConnected && signal.dayRxBytes > 0) formatBytes(signal.dayRxBytes) else "-"),
+                "MONTH" to (if (isConnected && signal.monthRxBytes > 0) formatBytes(signal.monthRxBytes) else "-"),
+                "UPTIME" to (if (isConnected) (signal.deviceUptimeSeconds?.let { com.example.odumonitor.util.FrequencyConverter.formatUptime(it) } ?: "-") else "-")
+            )
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                RouterMetricItem(
-                    label = "TRAFIK BULAN INI",
-                    value = if (signal.monthRxBytes > 0) formatBytes(signal.monthRxBytes) else "-",
-                    modifier = Modifier.weight(1f)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                RouterMetricItem(
-                    label = "TRAFIK HARI INI",
-                    value = if (signal.dayRxBytes > 0) formatBytes(signal.dayRxBytes) else "-",
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                RouterMetricItem(
-                    label = "SUHU CPU",
-                    value = signal.cpuTemp ?: "Normal",
-                    modifier = Modifier.weight(1f)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                RouterMetricItem(
-                    label = "UPTIME GATEWAY",
-                    value = signal.deviceUptimeSeconds?.let { com.example.odumonitor.util.FrequencyConverter.formatUptime(it) } ?: "-",
-                    modifier = Modifier.weight(1f)
-                )
+            val cols = if (isExpandedWidth) 3 else 2
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                metrics.chunked(cols).forEach { rowItems ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        rowItems.forEach { (lbl, value) ->
+                            RouterMetricItem(
+                                label = lbl,
+                                value = value,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -1032,138 +1427,157 @@ fun RouterTrafficCard(
 @Composable
 fun ThroughputTrendChart(
     history: List<OduSignalState>,
+    chartTimeRange: ChartTimeRange,
+    isConnected: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val dlPoints = history.map { it.downloadSpeedBps.toFloat() }
-    val ulPoints = history.map { it.uploadSpeedBps.toFloat() }
+    val isDark = isSystemInDarkTheme()
+    val dlColor = MaterialTheme.colorScheme.primary
+    val ulColor = if (isDark) SignalExcellent else SignalExcellentLight
+    val guideColor = MaterialTheme.colorScheme.outlineVariant
 
+    val dlPoints = if (isConnected) history.map { TimedMetricPoint(it.lastUpdated, it.downloadSpeedBps.toFloat()) } else emptyList()
+    val ulPoints = if (isConnected) history.map { TimedMetricPoint(it.lastUpdated, it.uploadSpeedBps.toFloat()) } else emptyList()
+
+    val avgDl = if (dlPoints.isNotEmpty()) dlPoints.map { it.value.toDouble() }.average().toLong() else 0L
     val actualMax = maxOf(
-        dlPoints.maxOrNull() ?: 0f,
-        ulPoints.maxOrNull() ?: 0f
+        dlPoints.maxOfOrNull { it.value } ?: 0f,
+        ulPoints.maxOfOrNull { it.value } ?: 0f
     )
-    val maxVal = actualMax.coerceAtLeast(1024f)
+
+    // Ratcheted Y-Axis Ceiling: starts at 5 Mbps (625,000 Bytes/s) minimum and only expands when a new peak exceeds it
+    val minCeilingBps = 625_000f // 5.0 Mbps
+    var lockedCeilingBps by remember(chartTimeRange) { mutableFloatStateOf(minCeilingBps) }
+    if (actualMax > lockedCeilingBps) {
+        lockedCeilingBps = actualMax * 1.12f
+    }
+    val maxVal = lockedCeilingBps.coerceAtLeast(minCeilingBps)
+
+    val windowEndMs = dlPoints.lastOrNull()?.timestampMs ?: System.currentTimeMillis()
+    val windowDurationMs = chartTimeRange.durationMillis.coerceAtLeast(1000L)
+    val windowStartMs = windowEndMs - windowDurationMs
+    val maxGapMs = maxOf((windowDurationMs / 60L) * 4L, 15_000L)
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = "Tren Throughput Real-Time",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                color = TextSecondary
+                text = "-${chartTimeRange.shortLabel.uppercase()}",
+                fontSize = 9.sp,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(AccentPrimary)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "Unduh",
-                    fontSize = 10.sp,
-                    color = AccentPrimary,
-                    fontWeight = FontWeight.SemiBold
-                )
-
-                Spacer(modifier = Modifier.width(10.dp))
-
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(SignalExcellent)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "Unggah",
-                    fontSize = 10.sp,
-                    color = SignalExcellent,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
+            Text(
+                text = "SKALA 0..${formatSpeed(maxVal.toLong())}",
+                fontSize = 9.sp,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
+            Text(
+                text = "0s",
+                fontSize = 9.sp,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+            )
         }
-
-        Spacer(modifier = Modifier.height(8.dp))
 
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(100.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(SurfaceCardSubtle)
-                .padding(horizontal = 8.dp, vertical = 6.dp)
+                .height(68.dp)
+                .padding(vertical = 4.dp)
         ) {
-            if (history.size < 2) {
+            if (!isConnected || history.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Mengumpulkan telemetri throughput...",
-                        fontSize = 11.sp,
-                        color = TextMuted
+                        text = if (!isConnected) "OFFLINE — TRAFIK DIJEDA" else "MENGUMPULKAN SAMPEL...",
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 0.8.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             } else {
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val w = size.width
                     val h = size.height
-                    val pointCount = dlPoints.size
-                    val stepX = if (pointCount > 1) w / (pointCount - 1) else w
 
-                    // Guide lines
+                    val gridColor = guideColor.copy(alpha = 0.35f)
                     drawLine(
-                        color = BorderSubtle.copy(alpha = 0.35f),
-                        start = Offset(0f, h * 0.25f),
-                        end = Offset(w, h * 0.25f),
-                        strokeWidth = 1.dp.toPx()
+                        color = gridColor,
+                        start = Offset(0f, 0f),
+                        end = Offset(w, 0f),
+                        strokeWidth = 1f
                     )
                     drawLine(
-                        color = BorderSubtle.copy(alpha = 0.35f),
-                        start = Offset(0f, h * 0.75f),
-                        end = Offset(w, h * 0.75f),
-                        strokeWidth = 1.dp.toPx()
+                        color = gridColor,
+                        start = Offset(0f, h * 0.5f),
+                        end = Offset(w, h * 0.5f),
+                        strokeWidth = 1f
+                    )
+                    drawLine(
+                        color = gridColor,
+                        start = Offset(0f, h),
+                        end = Offset(w, h),
+                        strokeWidth = 1f
                     )
 
-                    fun toOffsets(pts: List<Float>): List<Offset> {
-                        return pts.mapIndexed { idx, v ->
-                            val norm = (v / maxVal).coerceIn(0f, 1f)
-                            val x = idx * stepX
-                            val y = h - (norm * (h - 8.dp.toPx())) - 4.dp.toPx()
-                            Offset(x, y)
+                    fun toTimedOffsets(pts: List<TimedMetricPoint>): List<Pair<Long, Offset>> {
+                        return pts.map { pt ->
+                            val timeFraction = ((pt.timestampMs - windowStartMs).toFloat() / windowDurationMs.toFloat()).coerceIn(0f, 1f)
+                            val x = timeFraction * w
+                            val norm = (pt.value / maxVal).coerceIn(0f, 1f)
+                            val y = h - (norm * (h - 4.dp.toPx())) - 2.dp.toPx()
+                            Pair(pt.timestampMs, Offset(x, y))
                         }
                     }
 
-                    fun drawCurve(offsets: List<Offset>, color: Color) {
-                        if (offsets.size < 2) return
-                        val linePath = Path()
-                        val fillPath = Path()
-
-                        linePath.moveTo(offsets[0].x, offsets[0].y)
-                        fillPath.moveTo(offsets[0].x, h)
-                        fillPath.lineTo(offsets[0].x, offsets[0].y)
-
-                        for (i in 0 until offsets.size - 1) {
-                            val cur = offsets[i]
-                            val nxt = offsets[i + 1]
-                            val cpx = (cur.x + nxt.x) / 2f
-                            linePath.cubicTo(cpx, cur.y, cpx, nxt.y, nxt.x, nxt.y)
-                            fillPath.cubicTo(cpx, cur.y, cpx, nxt.y, nxt.x, nxt.y)
+                    fun drawLinearSeries(mapped: List<Pair<Long, Offset>>, color: Color) {
+                        if (mapped.isEmpty()) return
+                        if (mapped.size == 1) {
+                            drawCircle(color = color, radius = 3.dp.toPx(), center = mapped.first().second)
+                            return
                         }
 
-                        fillPath.lineTo(offsets.last().x, h)
+                        val linePath = Path()
+                        val fillPath = Path()
+                        var segStartX = mapped.first().second.x
+
+                        linePath.moveTo(mapped.first().second.x, mapped.first().second.y)
+                        fillPath.moveTo(mapped.first().second.x, h)
+                        fillPath.lineTo(mapped.first().second.x, mapped.first().second.y)
+
+                        for (i in 1 until mapped.size) {
+                            val prev = mapped[i - 1]
+                            val curr = mapped[i]
+                            if (curr.first - prev.first > maxGapMs) {
+                                fillPath.lineTo(prev.second.x, h)
+                                fillPath.lineTo(segStartX, h)
+                                fillPath.close()
+
+                                segStartX = curr.second.x
+                                linePath.moveTo(curr.second.x, curr.second.y)
+                                fillPath.moveTo(curr.second.x, h)
+                                fillPath.lineTo(curr.second.x, curr.second.y)
+                            } else {
+                                linePath.lineTo(curr.second.x, curr.second.y)
+                                fillPath.lineTo(curr.second.x, curr.second.y)
+                            }
+                        }
+
+                        fillPath.lineTo(mapped.last().second.x, h)
+                        fillPath.lineTo(segStartX, h)
                         fillPath.close()
 
                         drawPath(
                             path = fillPath,
                             brush = Brush.verticalGradient(
-                                colors = listOf(color.copy(alpha = 0.22f), color.copy(alpha = 0.01f))
+                                colors = listOf(color.copy(alpha = 0.16f), color.copy(alpha = 0.0f))
                             )
                         )
 
@@ -1171,7 +1585,7 @@ fun ThroughputTrendChart(
                             path = linePath,
                             color = color,
                             style = Stroke(
-                                width = 2.dp.toPx(),
+                                width = 1.75.dp.toPx(),
                                 cap = StrokeCap.Round,
                                 join = StrokeJoin.Round
                             )
@@ -1180,37 +1594,33 @@ fun ThroughputTrendChart(
                         drawCircle(
                             color = color,
                             radius = 3.dp.toPx(),
-                            center = offsets.last()
+                            center = mapped.last().second
                         )
                     }
 
-                    drawCurve(toOffsets(dlPoints), AccentPrimary)
-                    drawCurve(toOffsets(ulPoints), SignalExcellent)
+                    drawLinearSeries(toTimedOffsets(dlPoints), dlColor)
+                    drawLinearSeries(toTimedOffsets(ulPoints), ulColor)
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
-
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Min: 0 Mbps",
+                text = "TRAFFIC (${chartTimeRange.shortLabel.uppercase()})",
                 fontSize = 10.sp,
-                color = TextMuted
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                text = "${history.size} sampel terbaru",
+                text = "AVG ${if (isConnected) formatSpeed(avgDl) else "--"} • PEAK ${if (isConnected) formatSpeed(actualMax.toLong()) else "--"}",
                 fontSize = 10.sp,
-                color = TextMuted
-            )
-            Text(
-                text = "Puncak: ${formatSpeed(actualMax.toLong())}",
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextSecondary
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -1222,81 +1632,77 @@ fun RouterMetricItem(
     value: String,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(SurfaceCardSubtle)
-            .padding(horizontal = 10.dp, vertical = 8.dp)
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(6.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
     ) {
-        Text(
-            text = label,
-            fontSize = 9.sp,
-            fontWeight = FontWeight.Bold,
-            color = TextMuted,
-            letterSpacing = 0.5.sp
-        )
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = value,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = TextPrimary,
-            maxLines = 1
-        )
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
+        ) {
+            Text(
+                text = label,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 0.6.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = value,
+                fontSize = 12.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsBottomSheet(
-    config: WidgetConfig,
-    routerCreds: RouterCredentials,
-    notifConfig: NotificationConfig,
+fun RadioControlScreen(
     signalState: OduSignalState,
-    isTestingLogin: Boolean,
-    loginStatusMessage: String?,
+    horizontalPad: androidx.compose.ui.unit.Dp,
     isExecutingRadioCommand: Boolean,
     radioCommandMessage: String?,
-    onConfigChanged: (WidgetConfig) -> Unit,
-    onRouterCredentialsChanged: (RouterCredentials) -> Unit,
-    onTestLogin: (RouterCredentials) -> Unit,
-    onNotificationConfigChanged: (NotificationConfig) -> Unit,
-    onSetNetworkSelect: (String) -> Unit = {},
-    onSet4gBandLock: (String, String) -> Unit = { _, _ -> },
-    onSet5gBandLock: (String, String) -> Unit = { _, _ -> },
-    onLock4gCell: (Int, Int) -> Unit = { _, _ -> },
-    onUnlock4gCell: () -> Unit = {},
-    onLock5gCell: (Int, Int, Int) -> Unit = { _, _, _ -> },
-    onUnlock5gCell: () -> Unit = {},
-    onClearRadioMessage: () -> Unit = {},
-    onDismiss: () -> Unit
+    custom4gBands: Set<Int> = setOf(1, 3, 8, 40),
+    custom5gBands: Set<Int> = setOf(1, 3, 28, 40, 78),
+    onUpdateCustom4gBands: (Set<Int>) -> Unit = {},
+    onUpdateCustom5gBands: (Set<Int>) -> Unit = {},
+    onSetNetworkSelect: (String) -> Unit,
+    onSet4gBandLock: (String, String) -> Unit,
+    onSet5gBandLock: (String, String) -> Unit,
+    onLock4gCell: (Int, Int) -> Unit,
+    onUnlock4gCell: () -> Unit,
+    onLock5gCell: (Int, Int, Int) -> Unit,
+    onUnlock5gCell: () -> Unit,
+    onClearRadioMessage: () -> Unit,
+    onGoToRouterLogin: () -> Unit
 ) {
-    var selectedTab by remember { mutableIntStateOf(1) } // Default to Router tab
-    var hostInput by remember(routerCreds) { mutableStateOf(routerCreds.host) }
-    var usernameInput by remember(routerCreds) { mutableStateOf(routerCreds.username) }
-    var passwordInput by remember(routerCreds) { mutableStateOf(routerCreds.password) }
-    var isLoginEnabled by remember(routerCreds) { mutableStateOf(routerCreds.isLoginEnabled) }
-    var showPassword by remember { mutableStateOf(false) }
+    val isDark = isSystemInDarkTheme()
+    val warningColor = if (isDark) SignalFair else SignalFairLight
     var pendingConfirmation by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
 
     if (pendingConfirmation != null) {
         AlertDialog(
             onDismissRequest = { pendingConfirmation = null },
-            containerColor = SurfaceCard,
             title = {
                 Text(
                     text = "Konfirmasi Pengaturan Radio",
-                    color = TextPrimary,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
                 )
             },
             text = {
                 Text(
                     text = pendingConfirmation!!.first,
-                    color = TextSecondary,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp
+                    style = MaterialTheme.typography.bodyMedium
                 )
             },
             confirmButton = {
@@ -1306,938 +1712,1104 @@ fun SettingsBottomSheet(
                         pendingConfirmation = null
                         action()
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary)
+                    modifier = Modifier.heightIn(min = 48.dp)
                 ) {
-                    Text("Terapkan", color = BgBase, fontWeight = FontWeight.Bold)
+                    Text("Terapkan", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { pendingConfirmation = null }) {
-                    Text("Batal", color = TextSecondary)
+                TextButton(
+                    onClick = { pendingConfirmation = null },
+                    modifier = Modifier.heightIn(min = 48.dp)
+                ) {
+                    Text("Batal")
                 }
             }
         )
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = SurfaceCard,
-        contentColor = TextPrimary,
-        tonalElevation = 8.dp,
-        dragHandle = {
-            BottomSheetDefaults.DragHandle(
-                color = TextMuted
-            )
-        }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = horizontalPad, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 32.dp)
-                .verticalScroll(rememberScrollState())
-        ) {
-            // Segment Tab Selector (4 Clean Anti-slop Pills)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(SurfaceCardSubtle)
-                    .padding(4.dp)
+        if (!radioCommandMessage.isNullOrBlank()) {
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = if (isExecutingRadioCommand) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.secondaryContainer
+                    }
+                )
             ) {
-                val tabTitles = listOf("Widget", "Router", "Notif", "Radio & Band")
-                tabTitles.forEachIndexed { idx, title ->
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (selectedTab == idx) SurfaceCard else Color.Transparent)
-                            .clickable { selectedTab = idx }
-                            .padding(vertical = 8.dp),
-                        contentAlignment = Alignment.Center
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        if (isExecutingRadioCommand) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                        }
                         Text(
-                            text = title,
-                            fontSize = 11.sp,
-                            fontWeight = if (selectedTab == idx) FontWeight.Bold else FontWeight.Medium,
-                            color = if (selectedTab == idx) AccentPrimary else TextSecondary
+                            text = radioCommandMessage,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isExecutingRadioCommand) {
+                                MaterialTheme.colorScheme.onPrimaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.onSecondaryContainer
+                            }
                         )
+                    }
+                    if (!isExecutingRadioCommand) {
+                        IconButton(
+                            onClick = onClearRadioMessage,
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Tutup Pesan",
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!signalState.isConnected || !signalState.isRouterLoggedIn) {
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = if (!signalState.isConnected) Icons.Default.WifiOff else Icons.Default.Lock,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = if (!signalState.isConnected) {
+                                "ODU Terputus (Tidak Terjangkau)"
+                            } else {
+                                "Perlu Akses Admin Router"
+                            },
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = if (!signalState.isConnected) {
+                            "Perangkat belum terhubung ke ZTE MC7500. Sambungkan Wi-Fi/LAN ke router ODU terlebih dahulu sebelum mengubah pengaturan radio dan band."
+                        } else {
+                            "Fitur kendali radio membutuhkan sesi login admin router aktif. Silakan masuk ke Pengaturan Router untuk menguji login."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    FilledTonalButton(
+                        onClick = onGoToRouterLogin,
+                        modifier = Modifier.heightIn(min = 48.dp)
+                    ) {
+                        Text("Buka Pengaturan Login Router")
+                    }
+                }
+            }
+        } else {
+            // Card 1: Mode Jaringan (Bearer)
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "1. MODE JARINGAN (BEARER)",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Mode aktif: ${com.example.odumonitor.util.FrequencyConverter.formatBearerModeName(signalState.netSelect)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    val bearerModes = listOf(
+                        Triple("Auto (5G/4G/3G)", "WL_AND_5G", "Beralih ke mode otomatis (5G + 4G + 3G)?"),
+                        Triple("5G NSA + 4G LTE", "LTE_AND_5G", "Beralih ke mode 5G NSA + 4G LTE?"),
+                        Triple("5G SA Saja", "Only_5G", "Beralih ke 5G SA Saja? Pastikan kartu SIM & BTS mendukung 5G Standalone."),
+                        Triple("4G LTE Saja", "Only_LTE", "Beralih ke 4G LTE Saja? Modem tidak akan menggunakan sinyal 5G.")
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        bearerModes.chunked(2).forEach { rowModes ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                rowModes.forEach { (label, modeCode, promptText) ->
+                                    val isCurrent = signalState.netSelect == modeCode
+                                    FilterChip(
+                                        selected = isCurrent,
+                                        onClick = {
+                                            pendingConfirmation = Pair(promptText) {
+                                                onSetNetworkSelect(modeCode)
+                                            }
+                                        },
+                                        enabled = !isExecutingRadioCommand,
+                                        label = {
+                                            Text(
+                                                text = label,
+                                                fontSize = 12.sp,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .heightIn(min = 48.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
-
-            when (selectedTab) {
-                0 -> {
-                    // Widget Settings Section
+            // Card 2: Kunci Band 4G LTE
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "Pengaturan Homescreen Widget",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-                    Text(
-                        text = "Pilih metrik yang ingin ditampilkan pada widget 2x2 dan 4x2",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
-                    )
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    WidgetToggleItem(
-                        label = "Tampilkan Sinyal 5G",
-                        checked = config.show5g,
-                        onCheckedChange = { onConfigChanged(config.copy(show5g = it)) }
-                    )
-                    WidgetToggleItem(
-                        label = "Tampilkan Sinyal 4G LTE",
-                        checked = config.show4g,
-                        onCheckedChange = { onConfigChanged(config.copy(show4g = it)) }
-                    )
-                    WidgetToggleItem(
-                        label = "Status Provider & Koneksi",
-                        checked = config.showProviderStatus,
-                        onCheckedChange = { onConfigChanged(config.copy(showProviderStatus = it)) }
-                    )
-                    WidgetToggleItem(
-                        label = "ID Pemancar (PCI & Cell ID)",
-                        checked = config.showPciTower,
-                        onCheckedChange = { onConfigChanged(config.copy(showPciTower = it)) }
-                    )
-                    WidgetToggleItem(
-                        label = "Informasi Band Frekuensi",
-                        checked = config.showBandInfo,
-                        onCheckedChange = { onConfigChanged(config.copy(showBandInfo = it)) }
-                    )
-                    WidgetToggleItem(
-                        label = "Kejernihan Sinyal (SINR & RSRQ)",
-                        checked = config.showSinrRsrq,
-                        onCheckedChange = { onConfigChanged(config.copy(showSinrRsrq = it)) }
-                    )
-                    WidgetToggleItem(
-                        label = "Waktu Update Terakhir",
-                        checked = config.showTimestamp,
-                        onCheckedChange = { onConfigChanged(config.copy(showTimestamp = it)) }
-                    )
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    Text(
-                        text = "Interval Sinkronisasi Latar Belakang",
+                        text = "2. KUNCI BAND 4G LTE",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
-                        color = TextSecondary
+                        color = MaterialTheme.colorScheme.primary
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    val active4g = signalState.lteBandLock?.toLongOrNull()?.let {
+                        com.example.odumonitor.util.FrequencyConverter.parse4gActiveBands(it)
+                    } ?: emptyList()
+                    val active4gLabel = if (active4g.isEmpty() || active4g.size >= 10) {
+                        "Semua Band (Auto)"
+                    } else {
+                        "B" + active4g.joinToString(", B")
+                    }
+                    Text(
+                        text = "Status Kunci: $active4gLabel",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "Profil Operator Indonesia:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    val operatorProfiles = listOf(
+                        Triple("Telkomsel (B1,3,8,40)", listOf(1, 3, 8, 40), "Telkomsel (B1, B3, B8, B40)"),
+                        Triple("XL Axiata (B1,3,8)", listOf(1, 3, 8), "XL Axiata (B1, B3, B8)"),
+                        Triple("Indosat (B1,3,8)", listOf(1, 3, 8), "Indosat (B1, B3, B8)"),
+                        Triple("Smartfren (B28,40)", listOf(28, 40), "Smartfren (B28, B40)")
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        operatorProfiles.chunked(2).forEach { rowOps ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                rowOps.forEach { (btnText, bands, desc) ->
+                                    val mask = com.example.odumonitor.util.FrequencyConverter.calculate4gBandMask(bands).toString()
+                                    OutlinedButton(
+                                        onClick = {
+                                            pendingConfirmation = Pair("Kunci band 4G ke profil $desc? Modem akan memutus dan menyambung ulang.") {
+                                                onSet4gBandLock(mask, desc)
+                                            }
+                                        },
+                                        enabled = !isExecutingRadioCommand,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .heightIn(min = 48.dp),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Text(
+                                            text = btnText,
+                                            fontSize = 12.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Pilihan Band Tunggal 4G:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    val single4gBands = listOf(
+                        Pair("Band 1", 1),
+                        Pair("Band 3", 3),
+                        Pair("Band 8", 8),
+                        Pair("Band 40", 40),
+                        Pair("Band 28", 28)
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        single4gBands.chunked(3).forEach { rowBands ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                rowBands.forEach { (lbl, bandNum) ->
+                                    val mask = (1L shl (bandNum - 1)).toString()
+                                    FilledTonalButton(
+                                        onClick = {
+                                            pendingConfirmation = Pair("Kunci modem hanya ke 4G Band $bandNum?") {
+                                                onSet4gBandLock(mask, "Band $bandNum")
+                                            }
+                                        },
+                                        enabled = !isExecutingRadioCommand,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .heightIn(min = 48.dp),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Text(text = lbl, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Kombinasi Band Kustom 4G (Tersimpan Otomatis):",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    val custom4gCandidates = listOf(1, 3, 5, 8, 28, 40)
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        custom4gCandidates.chunked(3).forEach { rowCandidates ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                rowCandidates.forEach { bNum ->
+                                    val isSelected = custom4gBands.contains(bNum)
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = {
+                                            val updated = if (isSelected && custom4gBands.size > 1) {
+                                                custom4gBands - bNum
+                                            } else {
+                                                custom4gBands + bNum
+                                            }
+                                            onUpdateCustom4gBands(updated)
+                                        },
+                                        label = { Text("B$bNum", fontSize = 12.sp) },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .heightIn(min = 44.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    val intervals = listOf(
-                        15 to "15 Menit",
-                        30 to "30 Menit",
-                        60 to "1 Jam",
-                        180 to "3 Jam",
-                        360 to "6 Jam",
-                        -1 to "Manual"
-                    )
+                    val sortedCustom4g = custom4gBands.sorted()
+                    val custom4gDesc = "Kustom (" + sortedCustom4g.joinToString(", ") { "B$it" } + ")"
+                    val custom4gMask = com.example.odumonitor.util.FrequencyConverter.calculate4gBandMask(sortedCustom4g).toString()
 
-                    intervals.forEach { (min, label) ->
+                    Button(
+                        onClick = {
+                            pendingConfirmation = Pair("Kunci kombinasi band 4G ke $custom4gDesc?") {
+                                onSet4gBandLock(custom4gMask, custom4gDesc)
+                            }
+                        },
+                        enabled = !isExecutingRadioCommand && sortedCustom4g.isNotEmpty(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(text = "Terapkan $custom4gDesc", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            pendingConfirmation = Pair("Buka kunci dan aktifkan semua band 4G (Auto)?") {
+                                onSet4gBandLock(com.example.odumonitor.util.FrequencyConverter.FULL_4G_MASK.toString(), "Auto / Semua")
+                            }
+                        },
+                        enabled = !isExecutingRadioCommand,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(text = "Buka Semua Band 4G (Auto)", fontSize = 12.sp)
+                    }
+                }
+            }
+
+            // Card 3: Kunci Band 5G NR (SA)
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "3. KUNCI BAND 5G NR (SA)",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Pilih band 5G Standalone (n40 Telkomsel/Smartfren, n1, n3, n78):",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    val single5gBands = listOf("40", "1", "3", "78")
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        single5gBands.chunked(2).forEach { rowBands ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                rowBands.forEach { b ->
+                                    FilledTonalButton(
+                                        onClick = {
+                                            pendingConfirmation = Pair("Kunci frekuensi 5G SA ke band n$b?") {
+                                                onSet5gBandLock(b, "n$b")
+                                            }
+                                        },
+                                        enabled = !isExecutingRadioCommand,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .heightIn(min = 48.dp),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Text(text = "Band n$b", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Kombinasi Band Kustom 5G (Tersimpan Otomatis):",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    val custom5gCandidates = listOf(1, 3, 28, 40, 78)
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        custom5gCandidates.chunked(3).forEach { rowCandidates ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                rowCandidates.forEach { bNum ->
+                                    val isSelected = custom5gBands.contains(bNum)
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = {
+                                            val updated = if (isSelected && custom5gBands.size > 1) {
+                                                custom5gBands - bNum
+                                            } else {
+                                                custom5gBands + bNum
+                                            }
+                                            onUpdateCustom5gBands(updated)
+                                        },
+                                        label = { Text("n$bNum", fontSize = 12.sp) },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .heightIn(min = 44.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    val sortedCustom5g = custom5gBands.sorted()
+                    val custom5gDesc = "Kustom (" + sortedCustom5g.joinToString(", ") { "n$it" } + ")"
+                    val custom5gPayload = sortedCustom5g.joinToString(",")
+
+                    Button(
+                        onClick = {
+                            pendingConfirmation = Pair("Kunci kombinasi band 5G ke $custom5gDesc?") {
+                                onSet5gBandLock(custom5gPayload, custom5gDesc)
+                            }
+                        },
+                        enabled = !isExecutingRadioCommand && sortedCustom5g.isNotEmpty(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(text = "Terapkan $custom5gDesc", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            pendingConfirmation = Pair("Buka kunci dan aktifkan semua band 5G NR (Auto)?") {
+                                val full = com.example.odumonitor.util.FrequencyConverter.FULL_5G_BANDS.joinToString(",")
+                                onSet5gBandLock(full, "Auto / Semua")
+                            }
+                        },
+                        enabled = !isExecutingRadioCommand,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(text = "Buka Semua Band 5G (Auto)", fontSize = 12.sp)
+                    }
+                }
+            }
+
+            // Card 4: Cell Lock (PCI & Channel)
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "4. KUNCI PEMANCAR SEL (CELL LOCK)",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Kunci antena ke menara BTS aktif untuk mencegah perpindahan pemancar.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    val lock4gRaw = signalState.lockLteCell
+                    val is4gCellLocked = !lock4gRaw.isNullOrBlank() && lock4gRaw != "0,0"
+                    OutlinedCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Sel 4G LTE",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = if (is4gCellLocked) "Terkunci ($lock4gRaw)" else "Bebas (Auto)",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (is4gCellLocked) warningColor else MaterialTheme.colorScheme.primary
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            val canLock4g = signalState.ltePci > 0 && signalState.lteEarfcn != null
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        val pci = signalState.ltePci
+                                        val earfcn = signalState.lteEarfcn ?: 0
+                                        pendingConfirmation = Pair("Kunci permanen ke pemancar 4G PCI $pci (EARFCN $earfcn)?") {
+                                            onLock4gCell(pci, earfcn)
+                                        }
+                                    },
+                                    enabled = !isExecutingRadioCommand && canLock4g,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 48.dp),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Text(
+                                        text = if (canLock4g) "Kunci PCI ${signalState.ltePci}" else "Sel 4G Kosong",
+                                        fontSize = 12.sp,
+                                        maxLines = 1
+                                    )
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        pendingConfirmation = Pair("Buka kunci sel 4G agar modem dapat memilih BTS bebas secara otomatis?") {
+                                            onUnlock4gCell()
+                                        }
+                                    },
+                                    enabled = !isExecutingRadioCommand && is4gCellLocked,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 48.dp),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Text(text = "Buka Kunci", fontSize = 12.sp, maxLines = 1)
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    val lock5gRaw = signalState.lockNrCell
+                    val is5gCellLocked = !lock5gRaw.isNullOrBlank() && lock5gRaw != "0,0,0"
+                    OutlinedCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Sel 5G NR",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = if (is5gCellLocked) "Terkunci ($lock5gRaw)" else "Bebas (Auto)",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (is5gCellLocked) warningColor else MaterialTheme.colorScheme.primary
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            val canLock5g = signalState.nrPci > 0 && signalState.nrArfcn != null
+                            val nrBandNumber = signalState.nrBand.replace("n", "").trim().toIntOrNull() ?: 40
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        val pci = signalState.nrPci
+                                        val arfcn = signalState.nrArfcn ?: 0
+                                        pendingConfirmation = Pair("Kunci permanen ke pemancar 5G PCI $pci (ARFCN $arfcn, n$nrBandNumber)?") {
+                                            onLock5gCell(pci, arfcn, nrBandNumber)
+                                        }
+                                    },
+                                    enabled = !isExecutingRadioCommand && canLock5g,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 48.dp),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Text(
+                                        text = if (canLock5g) "Kunci PCI ${signalState.nrPci}" else "Sel 5G Kosong",
+                                        fontSize = 12.sp,
+                                        maxLines = 1
+                                    )
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        pendingConfirmation = Pair("Buka kunci sel 5G agar modem dapat memilih BTS bebas secara otomatis?") {
+                                            onUnlock5gCell()
+                                        }
+                                    },
+                                    enabled = !isExecutingRadioCommand && is5gCellLocked,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 48.dp),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Text(text = "Buka Kunci", fontSize = 12.sp, maxLines = 1)
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "* Catatan: Jika modem kehilangan sinyal setelah mengunci sel, tekan tombol 'Buka Kunci' lalu ubah mode jaringan atau tunggu modem sinkronisasi ulang.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsScreenContent(
+    selectedSubTab: Int,
+    horizontalPad: androidx.compose.ui.unit.Dp,
+    onSubTabSelected: (Int) -> Unit,
+    config: WidgetConfig,
+    routerCreds: RouterCredentials,
+    notifConfig: NotificationConfig,
+    historyRetention: HistoryRetention = HistoryRetention.TWENTY_FOUR_HOURS,
+    isTestingLogin: Boolean,
+    loginStatusMessage: String?,
+    onConfigChanged: (WidgetConfig) -> Unit,
+    onRouterCredentialsChanged: (RouterCredentials) -> Unit,
+    onTestLogin: (RouterCredentials) -> Unit,
+    onNotificationConfigChanged: (NotificationConfig) -> Unit,
+    onHistoryRetentionChanged: (HistoryRetention) -> Unit = {},
+    onClearHistory: () -> Unit = {}
+) {
+    val isDark = isSystemInDarkTheme()
+    val okColor = if (isDark) SignalExcellent else SignalExcellentLight
+
+    var hostInput by remember(routerCreds) { mutableStateOf(routerCreds.host) }
+    var usernameInput by remember(routerCreds) { mutableStateOf(routerCreds.username) }
+    var passwordInput by remember(routerCreds) { mutableStateOf(routerCreds.password) }
+    var isLoginEnabled by remember(routerCreds) { mutableStateOf(routerCreds.isLoginEnabled) }
+    var showPassword by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = horizontalPad, vertical = 12.dp)
+    ) {
+        val tabTitles = listOf("Router", "Widget", "Notifikasi")
+        SingleChoiceSegmentedButtonRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+        ) {
+            tabTitles.forEachIndexed { idx, title ->
+                SegmentedButton(
+                    selected = selectedSubTab == idx,
+                    onClick = { onSubTabSelected(idx) },
+                    shape = SegmentedButtonDefaults.itemShape(
+                        index = idx,
+                        count = tabTitles.size
+                    )
+                ) {
+                    Text(text = title, fontSize = 12.sp)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                when (selectedSubTab) {
+                    0 -> {
+                        Text(
+                            text = "Kredensial & Autentikasi Router",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Login memungkinkan pengambilan kuota, kecepatan real-time, dan status WAN",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onConfigChanged(config.copy(updateIntervalMinutes = min)) }
-                                .padding(vertical = 6.dp),
+                                .heightIn(min = 48.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = label,
-                                fontSize = 13.sp,
-                                color = TextPrimary
-                            )
-                            RadioButton(
-                                selected = config.updateIntervalMinutes == min,
-                                onClick = { onConfigChanged(config.copy(updateIntervalMinutes = min)) },
-                                colors = RadioButtonDefaults.colors(selectedColor = AccentPrimary)
-                            )
-                        }
-                    }
-                }
-                1 -> {
-                    // Router Authentication Section
-                    Text(
-                        text = "Kredensial & Autentikasi Router",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-                    Text(
-                        text = "Login memungkinkan pengambilan kuota, kecepatan real-time, dan status WAN",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
-                    )
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Aktifkan Login Otomatis",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = TextPrimary
-                        )
-                        Switch(
-                            checked = isLoginEnabled,
-                            onCheckedChange = {
-                                isLoginEnabled = it
-                                onRouterCredentialsChanged(
-                                    routerCreds.copy(
-                                        host = hostInput,
-                                        username = usernameInput,
-                                        password = passwordInput,
-                                        isLoginEnabled = it
-                                    )
-                                )
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = BgBase,
-                                checkedTrackColor = AccentPrimary,
-                                uncheckedThumbColor = TextMuted,
-                                uncheckedTrackColor = SurfaceCardSubtle
-                            )
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    OutlinedTextField(
-                        value = hostInput,
-                        onValueChange = { hostInput = it },
-                        label = { Text("IP Host / URL Router", color = TextSecondary) },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = AccentPrimary,
-                            unfocusedBorderColor = BorderSubtle,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                            cursorColor = AccentPrimary
-                        ),
-                        singleLine = true
-                    )
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    OutlinedTextField(
-                        value = usernameInput,
-                        onValueChange = { usernameInput = it },
-                        label = { Text("Username", color = TextSecondary) },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = AccentPrimary,
-                            unfocusedBorderColor = BorderSubtle,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                            cursorColor = AccentPrimary
-                        ),
-                        singleLine = true
-                    )
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    OutlinedTextField(
-                        value = passwordInput,
-                        onValueChange = { passwordInput = it },
-                        label = { Text("Password Web GUI", color = TextSecondary) },
-                        visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = {
-                            IconButton(onClick = { showPassword = !showPassword }) {
-                                Icon(
-                                    imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = "Toggle Password",
-                                    tint = TextSecondary
-                                )
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = AccentPrimary,
-                            unfocusedBorderColor = BorderSubtle,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                            cursorColor = AccentPrimary
-                        ),
-                        singleLine = true
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Button(
-                        onClick = {
-                            val newCreds = RouterCredentials(
-                                host = hostInput,
-                                username = usernameInput,
-                                password = passwordInput,
-                                isLoginEnabled = isLoginEnabled
-                            )
-                            onRouterCredentialsChanged(newCreds)
-                            onTestLogin(newCreds)
-                        },
-                        enabled = !isTestingLogin,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = AccentPrimary,
-                            contentColor = BgBase
-                        ),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        if (isTestingLogin) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                color = BgBase,
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Mengautentikasi...", fontWeight = FontWeight.Bold)
-                        } else {
-                            Text("Simpan & Uji Login", fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    if (loginStatusMessage != null) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(SurfaceCardSubtle)
-                                .border(
-                                    1.dp,
-                                    if (loginStatusMessage.startsWith("Berhasil")) SignalExcellent.copy(alpha = 0.5f) else SignalPoor.copy(alpha = 0.5f),
-                                    RoundedCornerShape(8.dp)
-                                )
-                                .padding(12.dp)
-                        ) {
-                            Text(
-                                text = loginStatusMessage,
-                                fontSize = 12.sp,
-                                color = if (loginStatusMessage.startsWith("Berhasil")) SignalExcellent else SignalPoor,
+                                text = "Aktifkan Login Otomatis",
+                                style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium
                             )
+                            Switch(
+                                checked = isLoginEnabled,
+                                onCheckedChange = {
+                                    isLoginEnabled = it
+                                    onRouterCredentialsChanged(
+                                        routerCreds.copy(
+                                            host = hostInput,
+                                            username = usernameInput,
+                                            password = passwordInput,
+                                            isLoginEnabled = it
+                                        )
+                                    )
+                                }
+                            )
                         }
-                    }
-                }
-                2 -> {
-                    // Notification & Alert Settings Section
-                    Text(
-                        text = "Layanan & Peringatan Latar Belakang",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-                    Text(
-                        text = "Deteksi perubahan jaringan real-time dan kirim notifikasi saat aplikasi ditutup",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
-                    )
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                    WidgetToggleItem(
-                        label = "Layanan Pemantauan Aktif (Foreground Service)",
-                        checked = notifConfig.isServiceEnabled,
-                        onCheckedChange = { onNotificationConfigChanged(notifConfig.copy(isServiceEnabled = it)) }
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    WidgetToggleItem(
-                        label = "Peringatan Perubahan Band (4G / 5G)",
-                        checked = notifConfig.notifyBandChange,
-                        onCheckedChange = { onNotificationConfigChanged(notifConfig.copy(notifyBandChange = it)) }
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    WidgetToggleItem(
-                        label = "Peringatan Perubahan Alamat WAN IP",
-                        checked = notifConfig.notifyWanIpChange,
-                        onCheckedChange = { onNotificationConfigChanged(notifConfig.copy(notifyWanIpChange = it)) }
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    WidgetToggleItem(
-                        label = "Peringatan ODU Terputus / Offline",
-                        checked = notifConfig.notifyOduOffline,
-                        onCheckedChange = { onNotificationConfigChanged(notifConfig.copy(notifyOduOffline = it)) }
-                    )
-                }
-                3 -> {
-                    // Radio & Band Management Section
-                    Text(
-                        text = "Alat Kendali Radio & Band",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-                    Text(
-                        text = "Kelola mode bearer, kunci band frekuensi, dan kunci pemancar sel ODU",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
-                    )
+                        OutlinedTextField(
+                            value = hostInput,
+                            onValueChange = { hostInput = it },
+                            label = { Text("IP Host / URL Router") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                    // Feedback Banner if command executed
-                    if (!radioCommandMessage.isNullOrBlank()) {
-                        Box(
+                        OutlinedTextField(
+                            value = usernameInput,
+                            onValueChange = { usernameInput = it },
+                            label = { Text("Username") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        OutlinedTextField(
+                            value = passwordInput,
+                            onValueChange = { passwordInput = it },
+                            label = { Text("Password Web GUI") },
+                            visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                            trailingIcon = {
+                                IconButton(
+                                    onClick = { showPassword = !showPassword },
+                                    modifier = Modifier.size(48.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                        contentDescription = "Tampilkan Password"
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Button(
+                            onClick = {
+                                val newCreds = RouterCredentials(
+                                    host = hostInput,
+                                    username = usernameInput,
+                                    password = passwordInput,
+                                    isLoginEnabled = isLoginEnabled
+                                )
+                                onRouterCredentialsChanged(newCreds)
+                                onTestLogin(newCreds)
+                            },
+                            enabled = !isTestingLogin,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (isExecutingRadioCommand) AccentPrimary.copy(alpha = 0.12f) else SurfaceCardSubtle)
-                                .border(1.dp, if (isExecutingRadioCommand) AccentPrimary.copy(alpha = 0.4f) else BorderSubtle, RoundedCornerShape(8.dp))
-                                .padding(12.dp)
+                                .heightIn(min = 48.dp),
+                            shape = RoundedCornerShape(10.dp)
                         ) {
-                            Row(
+                            if (isTestingLogin) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Mengautentikasi...", fontWeight = FontWeight.Bold)
+                            } else {
+                                Text("Simpan & Uji Login", fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        if (loginStatusMessage != null) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            val isSuccess = loginStatusMessage.startsWith("Berhasil")
+                            Surface(
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isSuccess) okColor.copy(alpha = 0.14f) else MaterialTheme.colorScheme.errorContainer
                             ) {
-                                Row(
-                                    modifier = Modifier.weight(1f),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    if (isExecutingRadioCommand) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(16.dp),
-                                            strokeWidth = 2.dp,
-                                            color = AccentPrimary
-                                        )
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                    }
-                                    Text(
-                                        text = radioCommandMessage,
-                                        fontSize = 12.sp,
-                                        color = if (isExecutingRadioCommand) AccentPrimary else TextPrimary
-                                    )
-                                }
-                                if (!isExecutingRadioCommand) {
-                                    IconButton(
-                                        onClick = onClearRadioMessage,
-                                        modifier = Modifier.size(24.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Close,
-                                            contentDescription = "Tutup",
-                                            tint = TextMuted,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                    }
-                                }
+                                Text(
+                                    text = loginStatusMessage,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (isSuccess) okColor else MaterialTheme.colorScheme.onErrorContainer,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.padding(12.dp)
+                                )
                             }
                         }
-                        Spacer(modifier = Modifier.height(14.dp))
                     }
 
-                    if (!signalState.isRouterLoggedIn) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF2E2616))
-                                .border(1.dp, Color(0xFF8C6D1F), RoundedCornerShape(8.dp))
-                                .padding(14.dp)
-                        ) {
-                            Column {
+                    1 -> {
+                        Text(
+                            text = "Pengaturan Homescreen Widget",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Pilih metrik yang ingin ditampilkan pada widget 2x2 dan 4x2",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        WidgetToggleItem(
+                            label = "Tampilkan Sinyal 5G",
+                            checked = config.show5g,
+                            onCheckedChange = { onConfigChanged(config.copy(show5g = it)) }
+                        )
+                        WidgetToggleItem(
+                            label = "Tampilkan Sinyal 4G LTE",
+                            checked = config.show4g,
+                            onCheckedChange = { onConfigChanged(config.copy(show4g = it)) }
+                        )
+                        WidgetToggleItem(
+                            label = "Status Provider & Koneksi",
+                            checked = config.showProviderStatus,
+                            onCheckedChange = { onConfigChanged(config.copy(showProviderStatus = it)) }
+                        )
+                        WidgetToggleItem(
+                            label = "ID Pemancar (PCI & Cell ID)",
+                            checked = config.showPciTower,
+                            onCheckedChange = { onConfigChanged(config.copy(showPciTower = it)) }
+                        )
+                        WidgetToggleItem(
+                            label = "Informasi Band Frekuensi",
+                            checked = config.showBandInfo,
+                            onCheckedChange = { onConfigChanged(config.copy(showBandInfo = it)) }
+                        )
+                        WidgetToggleItem(
+                            label = "Kejernihan Sinyal (SINR & RSRQ)",
+                            checked = config.showSinrRsrq,
+                            onCheckedChange = { onConfigChanged(config.copy(showSinrRsrq = it)) }
+                        )
+                        WidgetToggleItem(
+                            label = "Waktu Update Terakhir",
+                            checked = config.showTimestamp,
+                            onCheckedChange = { onConfigChanged(config.copy(showTimestamp = it)) }
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Text(
+                            text = "Interval Sinkronisasi Latar Belakang",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        val intervals = listOf(
+                            15 to "15 Menit",
+                            30 to "30 Menit",
+                            60 to "1 Jam",
+                            180 to "3 Jam",
+                            360 to "6 Jam",
+                            -1 to "Manual"
+                        )
+
+                        intervals.forEach { (min, label) ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .clickable { onConfigChanged(config.copy(updateIntervalMinutes = min)) }
+                                    .padding(vertical = 2.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Text(
-                                    text = "Perlu Akses Admin Router",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFFFD54F)
+                                    text = label,
+                                    style = MaterialTheme.typography.bodyMedium
                                 )
-                                Spacer(modifier = Modifier.height(4.dp))
+                                RadioButton(
+                                    selected = config.updateIntervalMinutes == min,
+                                    onClick = { onConfigChanged(config.copy(updateIntervalMinutes = min)) }
+                                )
+                            }
+                        }
+                    }
+
+                    2 -> {
+                        Text(
+                            text = "Layanan & Peringatan Latar Belakang",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Deteksi perubahan jaringan real-time dan kirim notifikasi saat aplikasi ditutup",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        WidgetToggleItem(
+                            label = "Layanan Pemantauan Aktif (Foreground Service)",
+                            checked = notifConfig.isServiceEnabled,
+                            onCheckedChange = { onNotificationConfigChanged(notifConfig.copy(isServiceEnabled = it)) }
+                        )
+                        WidgetToggleItem(
+                            label = "Peringatan Perubahan Band (4G / 5G)",
+                            checked = notifConfig.notifyBandChange,
+                            onCheckedChange = { onNotificationConfigChanged(notifConfig.copy(notifyBandChange = it)) }
+                        )
+                        WidgetToggleItem(
+                            label = "Peringatan Perubahan Alamat WAN IP",
+                            checked = notifConfig.notifyWanIpChange,
+                            onCheckedChange = { onNotificationConfigChanged(notifConfig.copy(notifyWanIpChange = it)) }
+                        )
+                        WidgetToggleItem(
+                            label = "Peringatan ODU Terputus / Offline",
+                            checked = notifConfig.notifyOduOffline,
+                            onCheckedChange = { onNotificationConfigChanged(notifConfig.copy(notifyOduOffline = it)) }
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Text(
+                            text = "Retensi Riwayat Grafik (Database SQLite)",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Menentukan berapa lama sampel grafik disimpan untuk rentang 1m hingga 24j",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        HistoryRetention.entries.forEach { retentionOption ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .clickable { onHistoryRetentionChanged(retentionOption) }
+                                    .padding(vertical = 2.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Text(
-                                    text = "Fitur kendali radio membutuhkan sesi login admin router aktif. Silakan masukkan kredensial di tab 'Router' dan klik 'Simpan & Uji Login'.",
-                                    fontSize = 12.sp,
-                                    color = TextSecondary
+                                    text = retentionOption.label,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                RadioButton(
+                                    selected = historyRetention == retentionOption,
+                                    onClick = { onHistoryRetentionChanged(retentionOption) }
                                 )
                             }
                         }
-                    } else {
-                        // Section 1: Network Mode (Bearer)
-                        Text(
-                            text = "1. MODE JARINGAN (BEARER)",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextSecondary,
-                            letterSpacing = 0.8.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Mode aktif: ${com.example.odumonitor.util.FrequencyConverter.formatBearerModeName(signalState.netSelect)}",
-                            fontSize = 12.sp,
-                            color = AccentPrimary,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
 
-                        val bearerModes = listOf(
-                            Triple("Auto (5G/4G/3G)", "WL_AND_5G", "Beralih ke mode otomatis (5G + 4G + 3G)?"),
-                            Triple("5G NSA + 4G LTE", "LTE_AND_5G", "Beralih ke mode 5G NSA + 4G LTE?"),
-                            Triple("5G SA Saja", "Only_5G", "Beralih ke 5G SA Saja? Pastikan kartu SIM & BTS mendukung 5G Standalone."),
-                            Triple("4G LTE Saja", "Only_LTE", "Beralih ke 4G LTE Saja? Modem tidak akan menggunakan sinyal 5G.")
-                        )
-
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            bearerModes.chunked(2).forEach { rowModes ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    rowModes.forEach { (label, modeCode, promptText) ->
-                                        val isCurrent = signalState.netSelect == modeCode
-                                        OutlinedButton(
-                                            onClick = {
-                                                pendingConfirmation = Pair(promptText) {
-                                                    onSetNetworkSelect(modeCode)
-                                                }
-                                            },
-                                            enabled = !isExecutingRadioCommand,
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(8.dp),
-                                            colors = ButtonDefaults.outlinedButtonColors(
-                                                containerColor = if (isCurrent) AccentPrimary.copy(alpha = 0.15f) else SurfaceCardSubtle,
-                                                contentColor = if (isCurrent) AccentPrimary else TextPrimary
-                                            ),
-                                            border = androidx.compose.foundation.BorderStroke(
-                                                1.dp,
-                                                if (isCurrent) AccentPrimary else BorderSubtle
-                                            )
-                                        ) {
-                                            Text(
-                                                text = label,
-                                                fontSize = 11.sp,
-                                                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-                                                maxLines = 1
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(18.dp))
-                        HorizontalDivider(color = BorderSubtle.copy(alpha = 0.4f))
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        // Section 2: 4G Band Locking
-                        Text(
-                            text = "2. KUNCI BAND 4G LTE",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextSecondary,
-                            letterSpacing = 0.8.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        val active4g = signalState.lteBandLock?.toLongOrNull()?.let {
-                            com.example.odumonitor.util.FrequencyConverter.parse4gActiveBands(it)
-                        } ?: emptyList()
-                        val active4gLabel = if (active4g.isEmpty() || active4g.size >= 10) {
-                            "Semua Band (Auto)"
-                        } else {
-                            "B" + active4g.joinToString(", B")
-                        }
-                        Text(
-                            text = "Status Kunci: $active4gLabel",
-                            fontSize = 12.sp,
-                            color = AccentPrimary,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Text(
-                            text = "Profil Operator Indonesia:",
-                            fontSize = 11.sp,
-                            color = TextMuted
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        val operatorProfiles = listOf(
-                            Triple("Telkomsel (B1,3,8,40)", listOf(1, 3, 8, 40), "Telkomsel (B1, B3, B8, B40)"),
-                            Triple("XL Axiata (B1,3,8)", listOf(1, 3, 8), "XL Axiata (B1, B3, B8)"),
-                            Triple("Indosat (B1,3,8)", listOf(1, 3, 8), "Indosat (B1, B3, B8)"),
-                            Triple("Smartfren (B28,40)", listOf(28, 40), "Smartfren (B28, B40)")
-                        )
-
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            operatorProfiles.chunked(2).forEach { rowOps ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    rowOps.forEach { (btnText, bands, desc) ->
-                                        val mask = com.example.odumonitor.util.FrequencyConverter.calculate4gBandMask(bands).toString()
-                                        OutlinedButton(
-                                            onClick = {
-                                                pendingConfirmation = Pair("Kunci band 4G ke profil $desc? Modem akan memutus dan menyambung ulang.") {
-                                                    onSet4gBandLock(mask, desc)
-                                                }
-                                            },
-                                            enabled = !isExecutingRadioCommand,
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(8.dp),
-                                            colors = ButtonDefaults.outlinedButtonColors(
-                                                containerColor = SurfaceCardSubtle,
-                                                contentColor = TextPrimary
-                                            ),
-                                            border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle)
-                                        ) {
-                                            Text(text = btnText, fontSize = 11.sp, maxLines = 1)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Pilihan Band Tunggal 4G:",
-                            fontSize = 11.sp,
-                            color = TextMuted
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        val single4gBands = listOf(
-                            Pair("B1", 1),
-                            Pair("B3", 3),
-                            Pair("B8", 8),
-                            Pair("B40", 40),
-                            Pair("B28", 28)
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            single4gBands.forEach { (lbl, bandNum) ->
-                                val mask = (1L shl (bandNum - 1)).toString()
-                                OutlinedButton(
-                                    onClick = {
-                                        pendingConfirmation = Pair("Kunci modem hanya ke 4G Band $bandNum?") {
-                                            onSet4gBandLock(mask, "Band $bandNum")
-                                        }
-                                    },
-                                    enabled = !isExecutingRadioCommand,
-                                    modifier = Modifier.weight(1f),
-                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
-                                    shape = RoundedCornerShape(6.dp),
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        containerColor = SurfaceCardSubtle,
-                                        contentColor = TextPrimary
-                                    ),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle)
-                                ) {
-                                    Text(text = lbl, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // Reset 4G Bands button
-                        OutlinedButton(
-                            onClick = {
-                                pendingConfirmation = Pair("Buka kunci dan aktifkan semua band 4G (Auto)?") {
-                                    onSet4gBandLock(com.example.odumonitor.util.FrequencyConverter.FULL_4G_MASK.toString(), "Auto / Semua")
-                                }
-                            },
-                            enabled = !isExecutingRadioCommand,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = SurfaceCardSubtle,
-                                contentColor = TextSecondary
-                            ),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle)
-                        ) {
-                            Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(text = "Buka Semua Band 4G (Auto)", fontSize = 12.sp)
-                        }
-
-                        Spacer(modifier = Modifier.height(18.dp))
-                        HorizontalDivider(color = BorderSubtle.copy(alpha = 0.4f))
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        // Section 3: 5G Band Locking
-                        Text(
-                            text = "3. KUNCI BAND 5G NR (SA)",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextSecondary,
-                            letterSpacing = 0.8.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Pilih band 5G Standalone (n40 Telkomsel/Smartfren, n1, n3, n78):",
-                            fontSize = 11.sp,
-                            color = TextMuted
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        val single5gBands = listOf("40", "1", "3", "78")
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            single5gBands.forEach { b ->
-                                OutlinedButton(
-                                    onClick = {
-                                        pendingConfirmation = Pair("Kunci frekuensi 5G SA ke band n$b?") {
-                                            onSet5gBandLock(b, "n$b")
-                                        }
-                                    },
-                                    enabled = !isExecutingRadioCommand,
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(6.dp),
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        containerColor = SurfaceCardSubtle,
-                                        contentColor = TextPrimary
-                                    ),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle)
-                                ) {
-                                    Text(text = "n$b", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        // Reset 5G Bands button
-                        OutlinedButton(
-                            onClick = {
-                                pendingConfirmation = Pair("Buka kunci dan aktifkan semua band 5G NR (Auto)?") {
-                                    val full = com.example.odumonitor.util.FrequencyConverter.FULL_5G_BANDS.joinToString(",")
-                                    onSet5gBandLock(full, "Auto / Semua")
-                                }
-                            },
-                            enabled = !isExecutingRadioCommand,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                containerColor = SurfaceCardSubtle,
-                                contentColor = TextSecondary
-                            ),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle)
-                        ) {
-                            Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(text = "Buka Semua Band 5G (Auto)", fontSize = 12.sp)
-                        }
-
-                        Spacer(modifier = Modifier.height(18.dp))
-                        HorizontalDivider(color = BorderSubtle.copy(alpha = 0.4f))
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        // Section 4: Cell Lock (PCI & Channel)
-                        Text(
-                            text = "4. KUNCI PEMANCAR SEL (CELL LOCK)",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextSecondary,
-                            letterSpacing = 0.8.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Kunci antena ke menara BTS aktif untuk mencegah perpindahan pemancar.",
-                            fontSize = 11.sp,
-                            color = TextMuted
-                        )
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // 4G Cell Lock Box
-                        val lock4gRaw = signalState.lockLteCell
-                        val is4gCellLocked = !lock4gRaw.isNullOrBlank() && lock4gRaw != "0,0"
-                        Box(
+                        OutlinedButton(
+                            onClick = onClearHistory,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(SurfaceCardSubtle)
-                                .border(1.dp, BorderSubtle, RoundedCornerShape(8.dp))
-                                .padding(12.dp)
+                                .heightIn(min = 48.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
                         ) {
-                            Column {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "Sel 4G LTE",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = TextPrimary
-                                    )
-                                    Text(
-                                        text = if (is4gCellLocked) "Terkunci ($lock4gRaw)" else "Bebas (Auto)",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = if (is4gCellLocked) SignalFair else AccentPrimary
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(8.dp))
-
-                                val canLock4g = signalState.ltePci > 0 && signalState.lteEarfcn != null
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Button(
-                                        onClick = {
-                                            val pci = signalState.ltePci
-                                            val earfcn = signalState.lteEarfcn ?: 0
-                                            pendingConfirmation = Pair("Kunci permanen ke pemancar 4G PCI $pci (EARFCN $earfcn)?") {
-                                                onLock4gCell(pci, earfcn)
-                                            }
-                                        },
-                                        enabled = !isExecutingRadioCommand && canLock4g,
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(6.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary)
-                                    ) {
-                                        Text(
-                                            text = if (canLock4g) "Kunci Sel 4G (PCI ${signalState.ltePci})" else "Sel 4G Tidak Tersedia",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = BgBase,
-                                            maxLines = 1
-                                        )
-                                    }
-
-                                    OutlinedButton(
-                                        onClick = {
-                                            pendingConfirmation = Pair("Buka kunci sel 4G agar modem dapat memilih BTS bebas secara otomatis?") {
-                                                onUnlock4gCell()
-                                            }
-                                        },
-                                        enabled = !isExecutingRadioCommand && is4gCellLocked,
-                                        modifier = Modifier.weight(0.6f),
-                                        shape = RoundedCornerShape(6.dp),
-                                        colors = ButtonDefaults.outlinedButtonColors(
-                                            containerColor = SurfaceCard,
-                                            contentColor = TextPrimary
-                                        ),
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle)
-                                    ) {
-                                        Text(text = "Buka Kunci", fontSize = 11.sp, maxLines = 1)
-                                    }
-                                }
-                            }
+                            Icon(
+                                imageVector = Icons.Default.DeleteOutline,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Bersihkan Semua Riwayat Grafik", fontWeight = FontWeight.SemiBold)
                         }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        // 5G Cell Lock Box
-                        val lock5gRaw = signalState.lockNrCell
-                        val is5gCellLocked = !lock5gRaw.isNullOrBlank() && lock5gRaw != "0,0,0"
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(SurfaceCardSubtle)
-                                .border(1.dp, BorderSubtle, RoundedCornerShape(8.dp))
-                                .padding(12.dp)
-                        ) {
-                            Column {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "Sel 5G NR",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = TextPrimary
-                                    )
-                                    Text(
-                                        text = if (is5gCellLocked) "Terkunci ($lock5gRaw)" else "Bebas (Auto)",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = if (is5gCellLocked) SignalFair else AccentPrimary
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(8.dp))
-
-                                val canLock5g = signalState.nrPci > 0 && signalState.nrArfcn != null
-                                val nrBandNumber = signalState.nrBand.replace("n", "").trim().toIntOrNull() ?: 40
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Button(
-                                        onClick = {
-                                            val pci = signalState.nrPci
-                                            val arfcn = signalState.nrArfcn ?: 0
-                                            pendingConfirmation = Pair("Kunci permanen ke pemancar 5G PCI $pci (ARFCN $arfcn, n$nrBandNumber)?") {
-                                                onLock5gCell(pci, arfcn, nrBandNumber)
-                                            }
-                                        },
-                                        enabled = !isExecutingRadioCommand && canLock5g,
-                                        modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(6.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = AccentPrimary)
-                                    ) {
-                                        Text(
-                                            text = if (canLock5g) "Kunci Sel 5G (PCI ${signalState.nrPci})" else "Sel 5G Tidak Tersedia",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = BgBase,
-                                            maxLines = 1
-                                        )
-                                    }
-
-                                    OutlinedButton(
-                                        onClick = {
-                                            pendingConfirmation = Pair("Buka kunci sel 5G agar modem dapat memilih BTS bebas secara otomatis?") {
-                                                onUnlock5gCell()
-                                            }
-                                        },
-                                        enabled = !isExecutingRadioCommand && is5gCellLocked,
-                                        modifier = Modifier.weight(0.6f),
-                                        shape = RoundedCornerShape(6.dp),
-                                        colors = ButtonDefaults.outlinedButtonColors(
-                                            containerColor = SurfaceCard,
-                                            contentColor = TextPrimary
-                                        ),
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle)
-                                    ) {
-                                        Text(text = "Buka Kunci", fontSize = 11.sp, maxLines = 1)
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = "* Catatan: Jika modem kehilangan sinyal setelah mengunci sel, tekan tombol 'Buka Kunci' lalu ubah mode jaringan atau tunggu modem sinkronisasi ulang.",
-                            fontSize = 11.sp,
-                            color = TextMuted,
-                            lineHeight = 15.sp
-                        )
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(18.dp))
-            Text(
-                text = "ZTE ODU Monitor v${com.example.odumonitor.BuildConfig.VERSION_NAME} (Build ${com.example.odumonitor.BuildConfig.VERSION_CODE})",
-                fontSize = 11.sp,
-                color = TextMuted,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
-            )
         }
+
+        Spacer(modifier = Modifier.height(20.dp))
+        Text(
+            text = "ZTE ODU Monitor v${com.example.odumonitor.BuildConfig.VERSION_NAME} (Build ${com.example.odumonitor.BuildConfig.VERSION_CODE})",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        )
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
@@ -2250,24 +2822,22 @@ fun WidgetToggleItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clickable { onCheckedChange(!checked) }
             .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = label,
-            fontSize = 13.sp,
-            color = TextPrimary
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
         )
+        Spacer(modifier = Modifier.width(8.dp))
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = BgBase,
-                checkedTrackColor = AccentPrimary,
-                uncheckedThumbColor = TextMuted,
-                uncheckedTrackColor = SurfaceCardSubtle
-            )
+            onCheckedChange = onCheckedChange
         )
     }
 }

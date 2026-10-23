@@ -1,0 +1,68 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Outer Concentric Radar Ring -->
+    <path
+        android:strokeColor="#000000"
+        android:strokeWidth="1.8"
+        android:pathData="M54,54m-30,0a30,30 0 1,1 60,0a30,30 0 1,1 -60,0" />
+
+    <!-- Middle Concentric Radar Ring -->
+    <path
+        android:strokeColor="#000000"
+        android:strokeAlpha="0.6"
+        android:strokeWidth="1.2"
+        android:pathData="M54,54m-20,0a20,20 0 1,1 40,0a20,20 0 1,1 -40,0" />
+
+    <!-- Inner Concentric Radar Ring -->
+    <path
+        android:strokeColor="#000000"
+        android:strokeAlpha="0.4"
+        android:strokeWidth="1"
+        android:pathData="M54,54m-10,0a10,10 0 1,1 20,0a10,10 0 1,1 -20,0" />
+
+    <!-- Precision Crosshairs -->
+    <path
+        android:strokeColor="#000000"
+        android:strokeAlpha="0.7"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:pathData="M54,24V46 M54,62V84 M24,54H46 M62,54H84" />
+
+    <!-- Calibration Ticks -->
+    <path
+        android:strokeColor="#000000"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M54,20V24 M54,84V88 M20,54H24 M84,54H88" />
+
+    <!-- 45-Degree Radar Sweep Arc (Monochrome Shaded Sector) -->
+    <path
+        android:fillColor="#000000"
+        android:fillAlpha="0.25"
+        android:pathData="M54,54 L54,24 A30,30 0 0,1 75.2,32.8 Z" />
+
+    <!-- Leading Edge Sweep Beam -->
+    <path
+        android:strokeColor="#000000"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round"
+        android:pathData="M54,54L75.2,32.8" />
+
+    <!-- Target Cell Blip -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M64,32.2a1.8,1.8 0 1,1 0.01,0" />
+    <path
+        android:strokeColor="#000000"
+        android:strokeWidth="1.2"
+        android:pathData="M64,30.5a3.5,3.5 0 1,1 0.01,0" />
+
+    <!-- Center Emitter Core -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M54,54m-3.5,0a3.5,3.5 0 1,1 7,0a3.5,3.5 0 1,1 -7,0" />
+</vector>

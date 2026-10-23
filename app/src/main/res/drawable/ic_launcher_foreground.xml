@@ -3,48 +3,94 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    
-    <!-- Dark Vantablack Background -->
-    <path
-        android:fillColor="#050505"
-        android:pathData="M0,0h108v108h-108z" />
 
-    <!-- Subtle Glow Circle -->
+    <!-- Outer Concentric Radar Ring (R=30) -->
     <path
-        android:fillColor="#1506B6D4"
-        android:pathData="M54,54m-38,0a38,38 0 1,1 76,0a38,38 0 1,1 -76,0" />
+        android:strokeColor="#334155"
+        android:strokeWidth="1.5"
+        android:pathData="M54,54m-30,0a30,30 0 1,1 60,0a30,30 0 1,1 -60,0" />
 
-    <!-- ODU Tower Base / Scaffold -->
+    <!-- Middle Concentric Radar Ring (R=20) -->
     <path
-        android:strokeColor="#9CA3AF"
-        android:strokeWidth="2.5"
+        android:strokeColor="#1E293B"
+        android:strokeWidth="1.2"
+        android:pathData="M54,54m-20,0a20,20 0 1,1 40,0a20,20 0 1,1 -40,0" />
+
+    <!-- Inner Concentric Radar Ring (R=10) -->
+    <path
+        android:strokeColor="#1E293B"
+        android:strokeWidth="1"
+        android:pathData="M54,54m-10,0a10,10 0 1,1 20,0a10,10 0 1,1 -20,0" />
+
+    <!-- Precision Crosshair Reticle (Cardinal Lines with Center Break) -->
+    <path
+        android:strokeColor="#334155"
+        android:strokeWidth="1"
         android:strokeLineCap="round"
-        android:pathData="M42,76L54,42L66,76 M46,64h16 M49,54h10" />
+        android:pathData="M54,24V46 M54,62V84 M24,54H46 M62,54H84" />
 
-    <!-- Central Antenna Spire -->
+    <!-- Calibration Tick Marks (Outer Ring) -->
     <path
         android:strokeColor="#06B6D4"
-        android:strokeWidth="3"
+        android:strokeWidth="1.5"
         android:strokeLineCap="round"
-        android:pathData="M54,44V26" />
+        android:pathData="M54,20V24 M54,84V88 M20,54H24 M84,54H88" />
 
-    <!-- Top Spire Tip Dot -->
+    <!-- 45-Degree Diagonal Calibration Marks -->
+    <path
+        android:strokeColor="#334155"
+        android:strokeWidth="1"
+        android:strokeLineCap="round"
+        android:pathData="M31,31L34,34 M74,74L77,77 M31,77L34,74 M74,34L77,31" />
+
+    <!-- 45° Radar Sweep Sector (Translucent Gradient Arc) -->
+    <path
+        android:fillColor="#2606B6D4"
+        android:pathData="M54,54 L54,24 A30,30 0 0,1 75.2,32.8 Z" />
+
+    <!-- Secondary Sweep Inner Pulse -->
+    <path
+        android:fillColor="#3310B981"
+        android:pathData="M54,54 L54,34 A20,20 0 0,1 68.1,39.9 Z" />
+
+    <!-- Trailing Arc Boundary (Cyan) -->
+    <path
+        android:strokeColor="#06B6D4"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:pathData="M54,54L54,24" />
+
+    <!-- Leading Edge Sweep Beam (Glowing Emerald) -->
+    <path
+        android:strokeColor="#10B981"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M54,54L75.2,32.8" />
+
+    <!-- Target Locked Tower Blip (Cell Signal Lock Ping) -->
+    <!-- Ping Halo Ring -->
+    <path
+        android:strokeColor="#10B981"
+        android:strokeWidth="1.2"
+        android:pathData="M64,30.5a3.5,3.5 0 1,1 0.01,0" />
+
+    <!-- Ping Solid Target Core -->
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M64,32.2a1.8,1.8 0 1,1 0.01,0" />
+
+    <!-- Central Emitter Glow Halo -->
+    <path
+        android:fillColor="#3006B6D4"
+        android:pathData="M54,54m-5.5,0a5.5,5.5 0 1,1 11,0a5.5,5.5 0 1,1 -11,0" />
+
+    <!-- Central Emitter Base Node -->
     <path
         android:fillColor="#06B6D4"
-        android:pathData="M54,24m-3,0a3,3 0 1,1 6,0a3,3 0 1,1 -6,0" />
+        android:pathData="M54,54m-3.5,0a3.5,3.5 0 1,1 7,0a3.5,3.5 0 1,1 -7,0" />
 
-    <!-- 5G Radio Wave Arcs (Cyan / Purple) -->
-    <!-- Inner Wave Arc -->
+    <!-- Central Emitter High-Glance Core Dot -->
     <path
-        android:strokeColor="#06B6D4"
-        android:strokeWidth="2.5"
-        android:strokeLineCap="round"
-        android:pathData="M45,30 A12,12 0 0,1 63,30" />
-
-    <!-- Outer Wave Arc -->
-    <path
-        android:strokeColor="#8B5CF6"
-        android:strokeWidth="2.5"
-        android:strokeLineCap="round"
-        android:pathData="M38,23 A20,20 0 0,1 70,23" />
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,54m-1.5,0a1.5,1.5 0 1,1 3,0a1.5,1.5 0 1,1 -3,0" />
 </vector>
