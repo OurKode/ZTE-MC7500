@@ -54,6 +54,9 @@ data class UiPreferences(
 class WidgetPreferences(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
 
+    /** Credentials are the one secret in the app, so they live in their own encrypted file. */
+    private val credentialStore = SecureCredentialStore(context)
+
     companion object {
         private const val PREF_NAME = "widget_preferences"
 
@@ -76,11 +79,6 @@ class WidgetPreferences(context: Context) {
         private const val KEY_UPDATE_INTERVAL = "update_interval_minutes"
 
         private const val KEY_RETENTION_SETTING = "history_retention_setting"
-
-        private const val KEY_ROUTER_HOST = "router_host"
-        private const val KEY_ROUTER_USERNAME = "router_username"
-        private const val KEY_ROUTER_PASSWORD = "router_password"
-        private const val KEY_ENABLE_ROUTER_LOGIN = "enable_router_login"
 
         private const val KEY_ENABLE_MONITOR_SERVICE = "enable_monitor_service"
         private const val KEY_NOTIFY_BAND_CHANGE = "notify_band_change"
@@ -175,24 +173,9 @@ class WidgetPreferences(context: Context) {
         }
     }
 
-    fun getRouterCredentials(): RouterCredentials {
-        return RouterCredentials(
-            host = prefs.getString(KEY_ROUTER_HOST, "192.168.254.1") ?: "192.168.254.1",
-            username = prefs.getString(KEY_ROUTER_USERNAME, "Admin") ?: "Admin",
-            password = prefs.getString(KEY_ROUTER_PASSWORD, "") ?: "",
-            isLoginEnabled = prefs.getBoolean(KEY_ENABLE_ROUTER_LOGIN, true)
-        )
-    }
+    fun getRouterCredentials(): RouterCredentials = credentialStore.load()
 
-    fun saveRouterCredentials(creds: RouterCredentials) {
-        prefs.edit().apply {
-            putString(KEY_ROUTER_HOST, creds.host.trim())
-            putString(KEY_ROUTER_USERNAME, creds.username.trim())
-            putString(KEY_ROUTER_PASSWORD, creds.password)
-            putBoolean(KEY_ENABLE_ROUTER_LOGIN, creds.isLoginEnabled)
-            apply()
-        }
-    }
+    fun saveRouterCredentials(creds: RouterCredentials) = credentialStore.save(creds)
 
     fun getWidgetConfig(): WidgetConfig {
         return WidgetConfig(
