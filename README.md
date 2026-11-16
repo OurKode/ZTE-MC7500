@@ -145,17 +145,25 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 This app talks to one device: the ZTE MC7500 on your own network. It sends no
 analytics, no crash reports and no telemetry anywhere else.
 
-- **Credentials**: the router host, username, password and login switch are stored in a
-  separate preferences file, each value encrypted with AES-256-GCM under a key that
-  stays inside the Android keystore (`AesGcmCipher`, random IV per value, authenticated
-  payload). Plaintext values from older builds are migrated on first read and deleted.
-  If the keystore is unavailable, credentials are kept in memory for the session only
-  and never written as plaintext.
-- **No credential logging**: no log statement prints a password, hash or request body.
+- **Credentials**: the router host, username and password are stored in a separate
+  preferences file, each encrypted with AES-256-GCM under a key that stays inside the
+  Android keystore (`AesGcmCipher`, random IV per value, authenticated payload). The
+  "log in to the router" switch is a plain boolean in the same file; it is a setting,
+  not a secret. Plaintext values from older builds are migrated on first read and
+  deleted. If the keystore is unavailable, credentials are kept in memory for the
+  session only and never written as plaintext.
+- **No credential logging**: the app writes two log lines in total, both in
+  `SecureCredentialStore` about keystore availability. No password, hash or request
+  body is logged.
 - **Backups are off** (`android:allowBackup="false"`), so preferences are not extractable
   through `adb backup`.
-- **Cleartext traffic is limited** to the router's own address through
-  `network_security_config.xml`; the rest of the app uses HTTPS.
+- **Cleartext traffic is allowed.** The router serves a plain HTTP API, and its address
+  is user-configurable, so `network_security_config.xml` permits cleartext instead of
+  pinning one host. Everything sent to the router, including the admin password and the
+  session token, crosses your LAN unencrypted. Requests try HTTPS first and fall back to
+  HTTP, but the client accepts any certificate and any hostname from the router, so that
+  HTTPS attempt is not a defence against an active attacker. Keep the app on a network
+  you trust.
 - **Radio writes always confirm**: band and cell locks pass through a confirmation
   dialog, and every write payload is covered by unit tests.
 

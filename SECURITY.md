@@ -28,7 +28,8 @@ is no formal SLA.
 
 | Data | Where | Protection |
 | --- | --- | --- |
-| Router host, username, password, login switch | `secure_router_credentials` | AES-256-GCM per value, key in the Android keystore, random IV, authenticated ciphertext |
+| Router host, username, password | `secure_router_credentials` | AES-256-GCM per value, key in the Android keystore, random IV, authenticated ciphertext |
+| Login on/off switch | `secure_router_credentials` | Plain boolean; a setting, not a secret |
 | Skin, chart toggles, polling interval, tab, band selections | `widget_preferences` | Ordinary app-private storage, no secrets |
 | Telemetry history (throughput, RSRP/SINR/RSRQ) | Local SQLite | App-private storage, retention is user-configurable |
 | Cached widget data | Glance state | App-private storage |
@@ -39,8 +40,13 @@ network peer is the ZTE MC7500 on the local network, or `192.168.254.1` by defau
 ## Known Limitations
 
 - **Cleartext HTTP to the router.** The device exposes a local web API over plain HTTP.
-  `network_security_config.xml` restricts cleartext to the gateway address, but traffic
-  on the LAN is unencrypted by design of the firmware.
+  `network_security_config.xml` permits cleartext for every host, because the router
+  address is configurable and the firmware offers no TLS alternative. Login credentials
+  and the session token travel unencrypted across the LAN by design of the firmware.
+- **No certificate validation for the router.** Requests try HTTPS first, then fall back
+  to HTTP. The HTTPS attempt accepts any certificate and any hostname, so it does not
+  protect against an active attacker on the LAN. The app trusts whatever answers at the
+  configured address.
 - **Router-side session token.** Login returns a session token held in memory only. It
   is never persisted.
 - **Radio write calls** are authenticated with the configured router credential. A
