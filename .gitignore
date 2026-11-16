@@ -54,6 +54,8 @@ SCHEMA.md
 !README.md
 !CHANGELOG.md
 !CONTRIBUTING.md
+!SECURITY.md
+!AGENTS.md
 !docs/*.md
 !docs/**/*.md
 !.github/**/*.md

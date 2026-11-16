@@ -12,7 +12,7 @@ import javax.crypto.spec.GCMParameterSpec
  * The stored form is `base64(iv || ciphertext || tag)`. GCM authenticates, so a
  * tampered or truncated value fails to decrypt instead of returning garbage.
  *
- * Plain JVM crypto only — no Android types — so the format can be unit tested.
+ * Plain JVM crypto only (no Android types), so the format can be unit tested.
  */
 internal class AesGcmCipher(private val key: SecretKey) {
 

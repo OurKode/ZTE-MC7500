@@ -1,84 +1,102 @@
-# Integrasi Fitur zte-script-ng.js ke Aplikasi ZTE MC7500 ODU Monitor
+# Integrating zte-script-ng.js into the ZTE MC7500 ODU Monitor
+
+> **Status: implemented.** This document records the reasoning behind the radio and
+> telemetry features that now ship in the app. Where it disagrees with the code, the
+> code and `docs/REFERENCE-SCRIPT.md` win.
 
 ## Problem Statement
-Bagaimana kita bisa menghadirkan kemampuan diagnostik telemetri mendalam dan kendali optimasi frekuensi radio (Band & Cell Locking) dari `zte-script-ng.js` ke dalam aplikasi Android tanpa risiko merusak konfigurasi jaringan atau memutuskan koneksi ODU secara permanen?
 
----
+How do we bring the deep telemetry diagnostics and the radio frequency controls (band
+and cell locking) from `zte-script-ng.js` into an Android app without risking a broken
+network configuration or permanently dropping the ODU off the cell?
 
 ## Recommended Direction
 
-Pendekatan yang dipilih adalah **Staged Safety Architecture** (Arsitektur Keselamatan Bertahap) yang memadukan integrasi telemetri mendalam yang aman (read-only) dengan kendali radio defensif berbasis profil operator terkurasi (*Curated Operator Profiles*):
+The chosen approach is a **staged safety architecture** that combines safe read-only
+deep telemetry with defensive radio control built on curated operator profiles:
 
-1. **Tahap 1 — Telemetri Diagnostik Mendalam (Aman & Non-Destruktif)**:
-   - Menambahkan pemantauan **Suhu CPU Router** (`zwrt_bsp.thermal` -> `get_cpu_temp`) dan **Info Perangkat/Uptime** (`zwrt_mc.device.manager` -> `get_device_info`).
-   - Mengimplementasikan konverter matematis channel radio ke frekuensi nyata dalam satuan **MHz**:
-     - 4G LTE: Rumus konversi EARFCN $\rightarrow$ Frekuensi downlink (MHz) berdasarkan 3GPP TS 36.101.
-     - 5G NR: Rumus konversi ARFCN rasters $\rightarrow$ Frekuensi MHz berdasarkan 3GPP TS 38.101.
-   - Menampilkan frekuensi MHz secara kontekstual di samping penamaan Band pada kartu sinyal utama (misal: `Band n40 • 2300.0 MHz`, `Band 3 • 1805.0 MHz`).
+1. **Stage 1: deep diagnostic telemetry (safe, non-destructive)**:
+   - Add **router CPU temperature** monitoring (`zwrt_bsp.thermal` -> `get_cpu_temp`)
+     and **device info / uptime** (`zwrt_mc.device.manager` -> `get_device_info`).
+   - Implement arithmetic channel-to-frequency conversion in **MHz**:
+     - 4G LTE: EARFCN to downlink frequency based on 3GPP TS 36.101.
+     - 5G NR: ARFCN raster to frequency based on 3GPP TS 38.101.
+   - Show the MHz value next to the band name on the main signal card (for example
+     `Band n40 • 2300.0 MHz`, `Band 3 • 1805.0 MHz`).
 
-2. **Tahap 2 — Manajemen Frekuensi Defensif (Alat Radio & Band)**:
-   - Ditempatkan pada tab terisolasi di `SettingsBottomSheet` bertajuk **"Alat Radio & Band"** agar terlindung dari sentuhan tidak sengaja.
-   - **Curated Operator Profiles**: Menghapus risiko kesalahan bitmask manual dengan menyediakan tombol preset band operator Indonesia yang telah divalidasi:
+2. **Stage 2: defensive frequency management (radio and band tools)**:
+   - Placed on an isolated Radio tab so the controls cannot be reached by accident.
+   - **Curated operator profiles** remove the risk of hand-built bitmasks by offering
+     validated Indonesian carrier presets:
      - **Telkomsel**: 4G (B1, B3, B8, B40) + 5G (n40)
      - **XL Axiata**: 4G (B1, B3, B8)
      - **Indosat Ooredoo Hutchison**: 4G (B1, B3, B8)
      - **Smartfren**: 4G (B40, B28)
-     - **Reset / Auto**: Memulihkan mask penuh (`buildFullMask`) untuk mengizinkan semua band.
-   - **One-Tap Current Cell Lock**:
-     - Fitur Cell Locking (PCI + EARFCN) hanya mengambil parameter dari *sel aktif yang sedang terhubung dan terbukti berjalan baik* (tanpa input teks angka bebas).
-     - Dilengkapi tombol darurat **"Buka Kunci Sel (Unlock)"** yang memanggil payload `(0, 0)` untuk 4G dan `(0, 0, 0)` untuk 5G.
-
----
+     - **Reset / Auto**: restores the full mask (`buildFullMask`) so every band is
+       allowed again.
+   - **One-tap current cell lock**:
+     - Cell locking (PCI + EARFCN) only ever takes parameters from the *active cell
+       that is currently connected and demonstrably working*; there is no free-text
+       numeric entry.
+     - Paired with an emergency **Unlock Cell** button that sends `(0, 0)` for 4G and
+       `(0, 0, 0)` for 5G.
 
 ## Key Assumptions Validated
 
-- [x] **Kompatibilitas UBUS RPC**: Endpoint `zwrt_bsp.thermal` (`get_cpu_temp`) dan `zwrt_mc.device.manager` (`get_device_info`) terbukti sukses dieksekusi dalam batch call RPC dengan data aktual (`53°C`, `23j 23m`).
-- [x] **Izin Bandlock pada Akun Admin**: Endpoint `nwinfo_set_gwl_bandlock`, `nwinfo_set_netselect`, `nwinfo_set_nrbandlock`, dan `nwinfo_lock_lte_cell` terintegrasi dengan validasi kredensial `Admin`.
-- [x] **Responsiveness saat Band Switching**: Router ZTE MC7500 membutuhkan jeda waktu re-sinkronisasi; UI menerapkan indikator progres non-blocking dan modal konfirmasi pencegahan insiden.
-
----
+- [x] **UBUS RPC compatibility**: the `zwrt_bsp.thermal` (`get_cpu_temp`) and
+  `zwrt_mc.device.manager` (`get_device_info`) endpoints succeed inside a batched RPC
+  call and return real data (`53°C`, `23h 23m`).
+- [x] **Band lock permission on the admin account**: `nwinfo_set_gwl_bandlock`,
+  `nwinfo_set_netselect`, `nwinfo_set_nrbandlock` and `nwinfo_lock_lte_cell` work with
+  the `Admin` credential validation in place.
+- [x] **Responsiveness during band switching**: the ZTE MC7500 needs time to
+  re-synchronise; the UI shows a non-blocking progress indicator and a confirmation
+  dialog to prevent accidents.
 
 ## MVP Scope
 
-### Yang Masuk dalam Lingkup (In-Scope):
-- **Diagnostik Telemetri (Read-Only)**:
-  - Pembacaan suhu CPU perangkat ODU (°C) di kartu status gateway.
-  - Perhitungan matematis frekuensi downlink (MHz) dari EARFCN & ARFCN aktif.
-  - Uptime router (format `X hari Y jam Z menit`).
-  - Parsing detail Carrier Aggregation (CA) sekunder (SCC) beserta bandwidth kanal (MHz).
-- **Manajemen Band & Radio (Control Layer)**:
-  - Tab "Alat Radio & Band" di bottom sheet pengaturan.
-  - Mode Jaringan (Bearer): Auto (5G/4G/3G), 5G NSA/SA, 4G Only.
-  - Preset Band Operator Indonesia (Telkomsel, XL, Indosat, Smartfren) + Toggle per-Band resmi.
-  - Tombol Darurat "Pulihkan Semua Band (Auto)".
-  - "Kunci ke Sel Saat Ini" (One-Tap Lock Current Cell) & "Buka Kunci Sel".
+### In Scope
 
----
+- **Telemetry diagnostics (read-only)**:
+  - ODU CPU temperature (°C) on the gateway status card.
+  - Downlink frequency arithmetic (MHz) from the active EARFCN and ARFCN.
+  - Router uptime.
+  - Secondary carrier aggregation (SCC) detail including channel bandwidth (MHz).
+- **Band and radio management (control layer)**:
+  - A dedicated Radio tab.
+  - Network mode (bearer): Auto (5G/4G/3G), 5G NSA/SA, 4G only.
+  - Indonesian operator band presets (Telkomsel, XL Axiata, Indosat, Smartfren) plus
+    per-band selection.
+  - Emergency "Restore All Bands (Auto)" button.
+  - "Lock to Current Cell" and "Unlock Cell".
 
-## Not Doing (dan Alasan)
+## Not Doing (and Why)
 
-- **Manajemen Parameter Wi-Fi Internal (`setWifiTxPower`, `setWifiCountry`, `setWifiMaxClients`)**:
-  - *Alasan*: ODU ZTE MC7500 adalah perangkat antena luar ruang (Outdoor Unit) yang fokus utamanya adalah penangkapan sinyal seluler selancar mungkin. Pengaturan Wi-Fi internal adalah ranah router indoor/mesh dan keluar dari fokus aplikasi.
-- **Input Angka Bitmask / PCI Manual Bebas**:
-  - *Alasan*: Menghindari risiko salah ketik angka PCI/EARFCN fiktif yang dapat membuat ODU *no-service* dan gagal terhubung ke menara seluler.
-- **Eksekusi Raw JavaScript / Evaluator Script**:
-  - *Alasan*: Seluruh logika dikonversi secara native ke bahasa **Kotlin** murni dengan typed data class, error handling, dan protokol Android yang aman.
+- **Internal Wi-Fi parameter management (`setWifiTxPower`, `setWifiCountry`,
+  `setWifiMaxClients`)**:
+  - *Reason*: the ZTE MC7500 is an outdoor unit whose job is to capture the cellular
+    signal as cleanly as possible. Internal Wi-Fi settings belong to an indoor router
+    or mesh and are outside this app's focus.
+- **Free-text bitmask or PCI entry**:
+  - *Reason*: a mistyped or invented PCI/EARFCN can leave the ODU with no service and
+    unable to attach to a cell.
+- **Raw JavaScript execution or script evaluator**:
+  - *Reason*: all logic is ported natively to **Kotlin** with typed data classes, error
+    handling, and the regular Android toolchain.
 
----
-
-## Roadmap Implementasi Teknis
+## Technical Implementation Roadmap
 
 ```mermaid
 flowchart TD
-    subgraph Fase 1: Telemetri & Frekuensi (Non-Destruktif)
-        A["1.1 DTO & RPC Tambahan: get_cpu_temp, get_device_info"] --> B["1.2 Modul Konversi EARFCN/ARFCN ke MHz (Pure Kotlin)"]
-        B --> C["1.3 Integrasi Visual MHz & Suhu CPU ke Dashboard"]
+    subgraph Phase 1: Telemetry and Frequency (Non-Destructive)
+        A["1.1 DTO and extra RPC: get_cpu_temp, get_device_info"] --> B["1.2 EARFCN/ARFCN to MHz module (pure Kotlin)"]
+        B --> C["1.3 Show MHz and CPU temperature on the dashboard"]
     end
 
-    subgraph Fase 2: Kendali Radio Terkurasi (Safety-First)
-        C --> D["2.1 Engine Bitmask 4G & Format String 5G (Curated Presets)"]
-        D --> E["2.2 RPC nwinfo_set_netselect & nwinfo_set_gwl_bandlock"]
-        E --> F["2.3 One-Tap Cell Lock (Lock Current Cell & Unlock)"]
-        F --> G["2.4 Tab 'Alat Radio & Band' di SettingsBottomSheet"]
+    subgraph Phase 2: Curated Radio Control (Safety First)
+        C --> D["2.1 4G bitmask engine and 5G string format (curated presets)"]
+        D --> E["2.2 RPC nwinfo_set_netselect and nwinfo_set_gwl_bandlock"]
+        E --> F["2.3 One-tap cell lock and unlock"]
+        F --> G["2.4 Dedicated Radio tab"]
     end
 ```

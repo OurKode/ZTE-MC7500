@@ -1,37 +1,66 @@
-# Material 3 & Material You Redesign
+# Material 3 and Material You Redesign
+
+> **Status: superseded.** The Material 3 / Material You pass shipped in 1.3.0 and was
+> then replaced by the retro field-instrument interface described in the README. This
+> document is kept as the record of that decision; dynamic colour, the six M3 palettes
+> and the AMOLED switch no longer exist in the app.
 
 ## Problem Statement
-Bagaimana mentransformasi ZTE ODU Monitor menjadi aplikasi Android Material 3 / Material You modern (Dynamic Color, Light/Dark mode adaptif, komponen M3 native) tanpa mengorbankan keterbacaan metrik RF teknis (RSRP/SINR/Throughput) dan kestabilan komunikasi gateway.
+
+How do we modernise the ZTE ODU Monitor into a current Android Material 3 / Material
+You app (dynamic colour, adaptive light and dark mode, native M3 components) without
+sacrificing the legibility of the technical RF metrics (RSRP, SINR, throughput) or the
+stability of the gateway communication?
 
 ## Recommended Direction
-Melakukan modernisasi menyeluruh secara bertahap:
-1. **Dynamic Theming Core**: Mengaktifkan `dynamicLightColorScheme()` dan `dynamicDarkColorScheme()` di Android 12+ (API 31+), dengan fallback palet M3 kustom (Light & Dark) untuk Android 8.0–11 (API 26–30).
-2. **Semantic Signal Color Matrix**: Mengatur warna sinyal (Excellent = Emerald, Fair = Amber, Poor = Coral) agar memiliki varian on-surface / container yang kontras tinggi dan memenuhi WCAG AA di mode terang maupun gelap.
-3. **M3 Modular Navigation**: Memecah `DashboardScreen.kt` (2.273 baris) menjadi `Scaffold` + `NavigationBar` 3 tab:
-   - **Monitor**: Live telemetry, dual gauge (RSRP/SINR), throughput chart, info WAN/SIM.
-   - **Radio Control**: Bearer switch (`SegmentedButton`), band lock (`FilterChip`), cell lock.
-   - **Settings & Stats**: Kuota, notifikasi, credentials router, widget preview.
-4. **Widget Harmony**: Memperbarui `OduCompactWidget` dan `OduDetailedWidget` menggunakan `GlanceTheme.colors`.
+
+Modernise in stages:
+
+1. **Dynamic theming core**: enable `dynamicLightColorScheme()` and
+   `dynamicDarkColorScheme()` on Android 12+ (API 31+), with a custom M3 palette
+   fallback (light and dark) for Android 8.0-11 (API 26-30).
+2. **Semantic signal colour matrix**: give the signal colours (excellent = emerald,
+   fair = amber, poor = coral) on-surface and container variants with enough contrast to
+   meet WCAG AA in both light and dark mode.
+3. **M3 modular navigation**: split `DashboardScreen.kt` (2,273 lines) into a `Scaffold`
+   plus a three-tab `NavigationBar`:
+   - **Monitor**: live telemetry, dual gauges (RSRP/SINR), throughput chart, WAN/SIM
+     info.
+   - **Radio**: bearer switch (`SegmentedButton`), band lock (`FilterChip`), cell lock.
+   - **Settings**: quota, notifications, router credentials, widget preview.
+4. **Widget harmony**: update `OduCompactWidget` and `OduDetailedWidget` to use
+   `GlanceTheme.colors`.
 
 ## Key Assumptions to Validate
-- [ ] Metrik sinyal RF tetap terbaca jelas di bawah terik matahari saat Light Mode aktif.
-- [ ] Pemecahan `DashboardScreen.kt` menjadi 3 tab tidak merusak polling background dan state sharing `DashboardViewModel`.
-- [ ] Dynamic Color pada widget Glance tidak menyebabkan render delay pada homescreen launcher pihak ketiga.
 
-## MVP Scope (Tahap 1)
-- **In Scope**:
-  - Konfigurasi `Theme.kt` (Dynamic Color + Light & Dark ColorScheme).
-  - Penyesuaian `Color.kt` untuk token semantic signal status.
-  - Implementasi `Scaffold` dengan `TopAppBar` dan `NavigationBar` M3 dasar.
-  - Migrasi kartu live telemetry utama ke `ElevatedCard` dan `OutlinedCard`.
-- **Out of Scope (MVP)**:
-  - Custom animation transisi antar tab (gunakan default M3 fade/slide).
-  - Redesain total canvas grafik throughput (cukup sesuaikan warna garis dengan `colorScheme.primary`).
+- [ ] RF signal metrics stay readable in direct sunlight with light mode active.
+- [ ] Splitting `DashboardScreen.kt` into three tabs does not break background polling
+      or the shared `DashboardViewModel` state.
+- [ ] Dynamic colour in Glance widgets does not add render delay on third-party
+      launchers.
+
+## MVP Scope (Stage 1)
+
+- **In scope**:
+  - `Theme.kt` configuration (dynamic colour plus light and dark `ColorScheme`).
+  - `Color.kt` adjustments for the semantic signal status tokens.
+  - A `Scaffold` with `TopAppBar` and a basic M3 `NavigationBar`.
+  - Migrating the main live telemetry cards to `ElevatedCard` and `OutlinedCard`.
+- **Out of scope**:
+  - Custom tab transition animations (use the default M3 fade and slide).
+  - A full redesign of the throughput chart canvas (match the line colour to
+    `colorScheme.primary`).
 
 ## Not Doing (and Why)
-- **Menghapus Dark Mode murni**: Pengguna monitor jaringan di malam hari membutuhkan kontras minim silau; Dark Mode tetap menjadi prioritas kelas satu.
-- **Membuat ulang logic polling ubus JSON-RPC**: Fokus hanya pada lapisan UI; data layer & repository tetap utuh.
-- **Pustaka UI pihak ketiga tambahan**: Menggunakan murni pustaka resmi `androidx.compose.material3`.
+
+- **Removing dark mode entirely**: people monitoring a network at night need low-glare
+  contrast; dark mode stays a first-class priority.
+- **Rewriting the ubus JSON-RPC polling logic**: this pass touches the UI layer only;
+  the data layer and repository stay intact.
+- **Additional third-party UI libraries**: use only the official
+  `androidx.compose.material3` packages.
 
 ## Open Questions
-- Apakah tab aktif terakhir perlu disimpan di `DataStore` / `SharedPreferences` agar saat app dibuka kembali langsung ke tab tersebut?
+
+- Should the last active tab be persisted in `DataStore` or `SharedPreferences` so the
+  app reopens where the user left it?

@@ -215,7 +215,7 @@ Services overview:
 |---|---|---|---|
 | 1 | `zte_nwinfo_api` | `nwinfo_get_netinfo` | 4G & 5G radio signal metrics |
 | 2 | `zwrt_router.api` | `router_get_status` | `mwan_wanlan1_wan_ipaddr` (Public WAN IP), connection status |
-| 3 | `zwrt_data` | `get_wwandst` | `real_rx_speed` & `real_tx_speed` (Bps), daily and monthly bytes |
+| 3 | `zwrt_data` | `get_wwandst` | `real_rx_speed` & `real_tx_speed` (Bps); `real_time` (connection duration, s); `real_`, `day_`, `month_`, `total_` groups each with `rx/tx_bytes`, `rx/tx_packets`, `rx/tx_drop_packets`, `rx/tx_error_packets`; `*_max_rx/tx_speed`. Verified live on MC7500 |
 | 4 | `zwrt_zte_mdm.api` | `get_sim_info` | `msisdn` (SIM telephone number), `sim_iccid` |
 | 6 | `zwrt_bsp.thermal` | `get_cpu_temp` | `cpuss_temp` (Gateway CPU temperature in Celsius) |
 | 7 | `zwrt_mc.device.manager` | `get_device_info` | `device_uptime` (Uptime in seconds), software version |
