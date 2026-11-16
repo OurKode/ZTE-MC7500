@@ -50,6 +50,14 @@ All notable changes to **ZTE MC7500 ODU Monitor** are documented in this file.
   `loadWidgetSignal()`, which falls back to a resolved offline state, and widget
   preferences fall back to defaults, so a database or keystore fault degrades the
   content instead of replacing the widget with an error box.
+- **Encrypted credentials no longer crash the app on start**: the cipher handed the
+  keystore a caller-supplied IV, which Android rejects for a key generated with the
+  default `setRandomizedEncryptionRequired(true)`. Encryption now lets the provider
+  generate the IV and stores it with the ciphertext, so saving a credential works.
+- **The 4G plate showed "4G LTLETE BAND 3"**: the router reports the band as
+  `LTE BAND 3`, which repeated the plate label. Bands are reduced to their short
+  identifier, so the plates read `5G NR n41` and `4G LTE B3`, and the band badge is
+  right-aligned instead of colliding with the label.
 
 ### Security
 - **Router credentials are now encrypted at rest**: the host, username, password and

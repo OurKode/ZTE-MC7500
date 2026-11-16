@@ -101,12 +101,13 @@ private fun section(
 ): WidgetSectionText {
     val hasSignal = rsrp != 0
     val standby = context.getString(R.string.widget_standby)
-    val showBand = config.showBandInfo && band != "-"
+    val label = bandLabel(band)
+    val showBand = config.showBandInfo && label != null
 
     return WidgetSectionText(
         title = context.getString(titleRes),
-        bandedTitle = if (showBand) context.getString(bandRes, band) else context.getString(titleRes),
-        band = if (showBand) band else null,
+        bandedTitle = if (label != null) context.getString(bandRes, label) else context.getString(titleRes),
+        band = if (showBand) label else null,
         value = if (hasSignal) "$rsrp dBm" else "-- dBm",
         snr = when {
             !config.showSinrRsrq -> null
@@ -123,4 +124,24 @@ private fun section(
             else -> context.getString(R.string.widget_pci, if (pci > 0) pci.toString() else "-")
         }
     )
+}
+
+/**
+ * A band as the widget shows it: the short identifier only.
+ *
+ * The router reports the 4G band as "LTE BAND 3", which duplicates the "4G LTE" plate
+ * label and ran the two strings together. 5G arrives as "n41" and is already short.
+ */
+private fun bandLabel(band: String): String? {
+    val text = band.trim()
+    if (text.isEmpty() || text == "-") return null
+
+    val digits = text.takeLastWhile { it.isDigit() }
+    if (digits.isEmpty()) return text
+
+    val lower = text.lowercase()
+    return when {
+        lower.contains("band") || lower.contains("b$digits") -> "B$digits"
+        else -> text
+    }
 }

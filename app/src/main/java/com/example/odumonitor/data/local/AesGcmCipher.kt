@@ -1,6 +1,5 @@
 package com.example.odumonitor.data.local
 
-import java.security.SecureRandom
 import java.util.Base64
 import javax.crypto.Cipher
 import javax.crypto.SecretKey
@@ -12,15 +11,23 @@ import javax.crypto.spec.GCMParameterSpec
  * The stored form is `base64(iv || ciphertext || tag)`. GCM authenticates, so a
  * tampered or truncated value fails to decrypt instead of returning garbage.
  *
+ * Encryption lets the provider pick the IV instead of handing one in. Keystore keys
+ * are generated with `setRandomizedEncryptionRequired` at its default of true, and
+ * Android then rejects a caller-supplied IV with
+ * `InvalidAlgorithmParameterException: Caller-provided IV not permitted`. The
+ * generated IV is public data, so it is stored next to the ciphertext and replayed
+ * on decrypt.
+ *
  * Plain JVM crypto only (no Android types), so the format can be unit tested.
  */
 internal class AesGcmCipher(private val key: SecretKey) {
 
     fun encrypt(plaintext: String): String {
-        val iv = ByteArray(IV_BYTES).also { SecureRandom().nextBytes(it) }
         val cipher = Cipher.getInstance(TRANSFORMATION).apply {
-            init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(TAG_BITS, iv))
+            init(Cipher.ENCRYPT_MODE, key)
         }
+        val iv = cipher.iv
+        require(iv.size == IV_BYTES) { "Unexpected GCM IV length: ${iv.size}" }
         val ciphertext = cipher.doFinal(plaintext.toByteArray(Charsets.UTF_8))
         return Base64.getEncoder().encodeToString(iv + ciphertext)
     }

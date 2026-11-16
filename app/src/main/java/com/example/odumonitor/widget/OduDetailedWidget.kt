@@ -220,7 +220,10 @@ private fun SignalPlate(
             .padding(8.dp)
     ) {
         Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = GlanceModifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
                     text = section.title,
                     style = TextStyle(color = labelColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
