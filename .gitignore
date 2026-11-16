@@ -64,3 +64,6 @@ SCHEMA.md
 .codegraph/
 *.png
 zte-script-ng.js
+
+# Local design notes, not part of the published repo
+docs/ideas/

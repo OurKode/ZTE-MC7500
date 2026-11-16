@@ -28,8 +28,7 @@ The upstream README separates two variants that are **not interchangeable**:
 
 **MC7500 is not listed explicitly under either.** This app uses the NG API surface
 (`zwrt_*`, `nwinfo_*`, `zte_nwinfo_api`) and is proven to work on an MC7500. See the
-validation notes in `docs/API.md` and `docs/ideas/zte-script-ng-integration.md`.
-Treat MC7500 as part of the NG family.
+validation notes in `docs/API.md`. Treat MC7500 as part of the NG family.
 
 Upstream also warns that ZTE has broken the locking API through firmware updates
 before (the B19 case on MC889). If band locking suddenly fails after an MC7500
@@ -172,7 +171,7 @@ replace the hardcoded `connectedDevicesCount = 1` in `OduRepository.kt:168`.
 
 | Endpoint | Reason |
 |---|---|
-| `zwrt_wlan` (internal Wi-Fi) | The ODU is an outdoor unit; Wi-Fi is the indoor router's job. See the "Not Doing" section of `docs/ideas/zte-script-ng-integration.md`. |
+| `zwrt_wlan` (internal Wi-Fi) | The ODU is an outdoor unit; Wi-Fi is the indoor router's job. |
 | `zwrt_wms` / `zwrt_wms_get_wms_capacity` (SMS) | No UI need; never evaluated. |
 
 ## Drift Check Against Upstream

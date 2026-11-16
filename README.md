@@ -217,8 +217,7 @@ ZTE-MC7500/
 │   └── build.gradle.kts  # Application module build and release logic
 ├── docs/
 │   ├── API.md            # Complete ubus JSON-RPC API specification
-│   ├── REFERENCE-SCRIPT.md  # Vendor script to Kotlin symbol map
-│   └── ideas/            # Design notes behind the shipped features
+│   └── REFERENCE-SCRIPT.md  # Vendor script to Kotlin symbol map
 ├── CONTRIBUTING.md       # Contribution guidelines
 ├── SECURITY.md           # Supported versions and vulnerability reporting
 ├── LICENSE               # MIT License
