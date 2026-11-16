@@ -18,7 +18,7 @@ val CreamInk = Color(0xFF1E1B16)
 val CreamInk2 = Color(0xFF5C5548)
 val CreamHairline = Color(0xFFC4BAA7)
 val CreamHairlineSoft = Color(0xFFD5CCBA)
-val CreamAccent = Color(0xFFB8481F)
+val CreamAccent = Color(0xFF9E3A14)
 val CreamAccentContainer = Color(0xFFF3D9CC)
 
 // Charcoal: warm near-black, never pure grey.
@@ -39,11 +39,11 @@ val CharcoalAccentContainer = Color(0xFF4A2412)
  */
 val SignalExcellent = Color(0xFF34D399)
 val SignalFair = Color(0xFFF59E0B)
-val SignalPoor = Color(0xFFEF4444)
+val SignalPoor = Color(0xFFF0605F)
 
-val SignalExcellentLight = Color(0xFF0F7A4D)
-val SignalFairLight = Color(0xFFB45309)
-val SignalPoorLight = Color(0xFFB3261E)
+val SignalExcellentLight = Color(0xFF096038)
+val SignalFairLight = Color(0xFF8F4209)
+val SignalPoorLight = Color(0xFFA11E1A)
 
 fun signalColor(level: Int, isDark: Boolean): Color = when (level) {
     0 -> if (isDark) SignalExcellent else SignalExcellentLight
