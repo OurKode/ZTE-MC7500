@@ -1,6 +1,7 @@
 package com.example.odumonitor.data.repository
 
 import android.content.Context
+import com.example.odumonitor.R
 import com.example.odumonitor.data.local.ChartTimeRange
 import com.example.odumonitor.data.local.HistoryRetention
 import com.example.odumonitor.data.local.OduDatabaseHelper
@@ -9,13 +10,17 @@ import com.example.odumonitor.data.local.WidgetPreferences
 import com.example.odumonitor.data.model.OduSignalState
 import com.example.odumonitor.data.model.OduTelemetryBundle
 import com.example.odumonitor.data.remote.OduApiService
+import com.example.odumonitor.data.remote.UbusPayloads
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
 class OduRepository(
     private val context: Context? = null,
-    private val apiService: OduApiService = OduApiService()
+    private val apiService: OduApiService = OduApiService(context)
 ) {
+    private fun text(resId: Int, fallback: String, vararg args: Any): String =
+        context?.getString(resId, *args) ?: fallback
+
     private val dbHelper = context?.let { OduDatabaseHelper(it) }
     private val widgetPrefs = context?.let { WidgetPreferences(it) }
 
@@ -29,13 +34,13 @@ class OduRepository(
                 saveAndPruneSignalHistory(state)
                 emit(state)
             } else {
-                val rawErr = result.exceptionOrNull()?.message ?: "Jaringan tidak terjangkau"
+                val rawErr = result.exceptionOrNull()?.message ?: text(R.string.repo_unreachable, "Network unreachable")
                 emit(
                     OduSignalState(
                         isConnected = false,
-                        connectionType = "Terputus",
-                        provider = "ODU Terputus (Offline)",
-                        errorMessage = "Tidak dapat terhubung ke ODU di ${creds.host}. Pastikan Wi-Fi/LAN terhubung ke router. ($rawErr)",
+                        connectionType = text(R.string.repo_disconnected, "Disconnected"),
+                        provider = text(R.string.repo_offline_provider, "ODU offline"),
+                        errorMessage = text(R.string.repo_link_error, "Cannot reach the ODU at ${creds.host}. Check the Wi-Fi or LAN link to the router. ($rawErr)", creds.host, rawErr),
                         lastUpdated = System.currentTimeMillis()
                     )
                 )
@@ -52,12 +57,12 @@ class OduRepository(
             saveAndPruneSignalHistory(mapped)
             mapped
         } else {
-            val rawErr = result.exceptionOrNull()?.message ?: "Jaringan tidak terjangkau"
+            val rawErr = result.exceptionOrNull()?.message ?: text(R.string.repo_unreachable, "Network unreachable")
             OduSignalState(
                 isConnected = false,
-                connectionType = "Terputus",
-                provider = "ODU Terputus (Offline)",
-                errorMessage = "Tidak dapat terhubung ke ODU di ${creds.host}. Pastikan Wi-Fi/LAN terhubung ke router. ($rawErr)",
+                connectionType = text(R.string.repo_disconnected, "Disconnected"),
+                provider = text(R.string.repo_offline_provider, "ODU offline"),
+                errorMessage = text(R.string.repo_link_error, "Cannot reach the ODU at ${creds.host}. Check the Wi-Fi or LAN link to the router. ($rawErr)", creds.host, rawErr),
                 lastUpdated = System.currentTimeMillis()
             )
         }
@@ -121,7 +126,7 @@ class OduRepository(
         val nrArfcnInt = p.nr5gActionChannel?.toIntOrNull()
         val nrFreq = nrArfcnInt?.let { com.example.odumonitor.util.FrequencyConverter.convert5gArfcnToMhz(it) }
 
-        val cpuTempFormatted = bundle.thermal?.cpussTemp?.let { if (it.isNotBlank() && it != "0") "$it°C" else null }
+        val cpuTempRaw = bundle.thermal?.cpussTemp?.let { if (it.isNotBlank() && it != "0") it else null }
 
         return OduSignalState(
             isConnected = true,
@@ -164,12 +169,23 @@ class OduRepository(
             downloadSpeedBps = bundle.traffic?.realRxSpeed ?: 0L,
             uploadSpeedBps = bundle.traffic?.realTxSpeed ?: 0L,
             dayRxBytes = bundle.traffic?.dayRxBytes ?: 0L,
+            dayTxBytes = bundle.traffic?.dayTxBytes ?: 0L,
             monthRxBytes = bundle.traffic?.monthRxBytes ?: 0L,
-            connectedDevicesCount = 1,
+            monthTxBytes = bundle.traffic?.monthTxBytes ?: 0L,
+            totalRxBytes = bundle.traffic?.totalRxBytes ?: 0L,
+            totalTxBytes = bundle.traffic?.totalTxBytes ?: 0L,
+            dayRxErrorPackets = bundle.traffic?.dayRxErrorPackets ?: 0L,
+            dayTxErrorPackets = bundle.traffic?.dayTxErrorPackets ?: 0L,
+            dayRxDropPackets = bundle.traffic?.dayRxDropPackets ?: 0L,
+            dayTxDropPackets = bundle.traffic?.dayTxDropPackets ?: 0L,
+            connectionDurationSeconds = bundle.traffic?.realTime ?: 0L,
+            peakDownloadSpeedBps = bundle.traffic?.realMaxRxSpeed ?: 0L,
+            peakUploadSpeedBps = bundle.traffic?.realMaxTxSpeed ?: 0L,
+            connectedDevicesCount = bundle.userListNum?.accessTotalNum ?: 0,
             simPhoneNumber = bundle.simInfo?.msisdn,
 
             // Deep Diagnostics Telemetry
-            cpuTemp = cpuTempFormatted,
+            cpuTemp = cpuTempRaw,
             deviceUptimeSeconds = bundle.deviceInfo?.deviceUptime,
             softwareVersion = bundle.deviceInfo?.softwareVersion ?: bundle.deviceInfo?.waInnerVersion,
 
@@ -187,7 +203,7 @@ class OduRepository(
             creds = creds,
             service = "zte_nwinfo_api",
             method = "nwinfo_set_netselect",
-            paramsJson = """{"net_select":"$mode"}""",
+            paramsJson = UbusPayloads.networkSelect(mode),
             tag = "nwinfo_set_netselect"
         )
     }
@@ -198,7 +214,7 @@ class OduRepository(
             creds = creds,
             service = "zte_nwinfo_api",
             method = "nwinfo_set_gwl_bandlock",
-            paramsJson = """{"is_gw_band":"0","gw_band_mask":"0","is_lte_band":"1","lte_band_mask":"$maskDecimalString"}""",
+            paramsJson = UbusPayloads.lock4gBands(maskDecimalString),
             tag = "nwinfo_set_gwl_bandlock"
         )
     }
@@ -209,7 +225,7 @@ class OduRepository(
             creds = creds,
             service = "zte_nwinfo_api",
             method = "nwinfo_set_nrbandlock",
-            paramsJson = """{"nr5g_type":"SA","nr5g_band":"$bandsCommaSeparated"}""",
+            paramsJson = UbusPayloads.lock5gBands(bandsCommaSeparated),
             tag = "nwinfo_set_nrbandlock"
         )
     }
@@ -220,7 +236,7 @@ class OduRepository(
             creds = creds,
             service = "zte_nwinfo_api",
             method = "nwinfo_lock_lte_cell",
-            paramsJson = """{"lock_lte_pci":"$pci","lock_lte_earfcn":"$earfcn"}""",
+            paramsJson = UbusPayloads.lock4gCell(pci, earfcn),
             tag = "nwinfo_lock_lte_cell"
         )
     }
@@ -229,25 +245,23 @@ class OduRepository(
         return lock4gCell(0, 0)
     }
 
+    /**
+     * Payload contract comes from the vendor script (lock_nr_pci, lock_nr_earfcn,
+     * lock_nr_cell_band, all sent as strings). The older nr5g_* key names are not
+     * accepted by this firmware, so they must not come back.
+     */
     suspend fun lock5gCell(pci: Int, earfcnOrArfcn: Int, bandNumber: Int): Result<Boolean> {
         val creds = widgetPrefs?.getRouterCredentials() ?: RouterCredentials()
         return apiService.executeAuthenticatedCommand(
             creds = creds,
             service = "zte_nwinfo_api",
             method = "nwinfo_lock_nr_cell",
-            paramsJson = """{"nr5g_CellLockType":1,"nr5g_pci":$pci,"nr5g_arfcn":$earfcnOrArfcn,"nr5g_band":$bandNumber,"nr5g_scs":1}""",
+            paramsJson = UbusPayloads.lock5gCell(pci, earfcnOrArfcn, bandNumber),
             tag = "nwinfo_lock_nr_cell"
         )
     }
 
     suspend fun unlock5gCell(): Result<Boolean> {
-        val creds = widgetPrefs?.getRouterCredentials() ?: RouterCredentials()
-        return apiService.executeAuthenticatedCommand(
-            creds = creds,
-            service = "zte_nwinfo_api",
-            method = "nwinfo_lock_nr_cell",
-            paramsJson = """{"nr5g_CellLockType":0,"nr5g_pci":0,"nr5g_arfcn":0,"nr5g_band":0,"nr5g_scs":0}""",
-            tag = "nwinfo_lock_nr_cell"
-        )
+        return lock5gCell(0, 0, 0)
     }
 }

@@ -39,8 +39,8 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            OduMonitorTheme {
-                val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+            val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+            OduMonitorTheme(appearanceConfig = uiState.appearanceConfig) {
                 DashboardScreen(
                     uiState = uiState,
                     onRefresh = { viewModel.refreshImmediately() },
@@ -53,6 +53,7 @@ class MainActivity : ComponentActivity() {
                     onUpdateCustom5gBands = { viewModel.setCustom5gBands(it) },
                     onUpdateHistoryRetention = { viewModel.updateHistoryRetention(it) },
                     onClearHistory = { viewModel.clearSignalHistory() },
+                    onAppearanceConfigChanged = { viewModel.updateAppearanceConfig(it) },
                     onWidgetConfigChanged = { viewModel.updateWidgetConfig(it) },
                     onRouterCredentialsChanged = { viewModel.updateRouterCredentials(it) },
                     onTestRouterLogin = { viewModel.testRouterLogin(it) },

@@ -1,5 +1,7 @@
 package com.example.odumonitor.data.remote
 
+import android.content.Context
+import com.example.odumonitor.R
 import com.example.odumonitor.data.local.RouterCredentials
 import com.example.odumonitor.data.model.*
 import kotlinx.coroutines.Dispatchers
@@ -19,9 +21,13 @@ import java.util.concurrent.TimeUnit
 import javax.net.ssl.*
 
 class OduApiService(
+    private val context: Context? = null,
     private val client: OkHttpClient = SharedClient,
     private val json: Json = SharedJson
 ) {
+    private fun text(resId: Int, fallback: String, vararg args: Any): String =
+        context?.getString(resId, *args) ?: fallback
+
     companion object {
         val SharedJson = Json {
             ignoreUnknownKeys = true
@@ -84,7 +90,7 @@ class OduApiService(
         runCatching {
             if (password.isBlank()) {
                 isCurrentlyLoggedIn = false
-                throw IOException("Password router belum dikonfigurasi di Setelan")
+                throw IOException(text(R.string.api_password_missing, "No router password configured. Set one in Settings."))
             }
             val timestamp = System.currentTimeMillis()
             val cleanHost = host.trim()
@@ -94,11 +100,11 @@ class OduApiService(
             val saltResp = executeRpc(cleanHost, "web_login_info", saltPayload, timestamp)
             val saltJson = json.decodeFromString<List<UbusResponse>>(saltResp)
             val loginInfo = saltJson.firstOrNull()?.extractPayload<OduLoginInfoPayload>(json)
-                ?: throw IOException("Gagal memperoleh salt autentikasi dari router")
+                ?: throw IOException(text(R.string.api_salt_failed, "Could not read the login salt from the router."))
 
             val salt = loginInfo.zteWebSault
             if (salt.isNullOrBlank()) {
-                throw IOException("Router tidak mengembalikan zte_web_sault")
+                throw IOException(text(R.string.api_salt_empty, "The router did not return zte_web_sault."))
             }
 
             // 2. Compute Double-SHA256 Uppercase Hash
@@ -109,7 +115,7 @@ class OduApiService(
             val loginResp = executeRpc(cleanHost, "web_login", loginPayload, timestamp + 1)
             val loginJson = json.decodeFromString<List<UbusResponse>>(loginResp)
             val loginResult = loginJson.firstOrNull()?.extractPayload<OduLoginResultPayload>(json)
-                ?: throw IOException("Gagal memproses respons login router")
+                ?: throw IOException(text(R.string.api_login_parse_failed, "Could not parse the router login response."))
 
             if (loginResult.result == 0 && !loginResult.ubusRpcSession.isNullOrBlank()) {
                 sessionToken = loginResult.ubusRpcSession
@@ -117,7 +123,7 @@ class OduApiService(
                 sessionToken
             } else {
                 isCurrentlyLoggedIn = false
-                throw IOException("Kredensial salah (kode respons router: ${loginResult.result})")
+                throw IOException(text(R.string.api_bad_credentials, "Wrong credentials (router response code ${loginResult.result}).", loginResult.result.toString()))
             }
         }
     }
@@ -168,6 +174,7 @@ class OduApiService(
                     {"jsonrpc":"2.0","id":2,"method":"call","params":["$token","zwrt_router.api","router_get_status",{}]},
                     {"jsonrpc":"2.0","id":3,"method":"call","params":["$token","zwrt_data","get_wwandst",{"source_module":"web","cid":1,"type":4}]},
                     {"jsonrpc":"2.0","id":4,"method":"call","params":["$token","zwrt_zte_mdm.api","get_sim_info",{}]},
+                    {"jsonrpc":"2.0","id":5,"method":"call","params":["$token","zwrt_router.api","router_get_user_list_num",{}]},
                     {"jsonrpc":"2.0","id":6,"method":"call","params":["$token","zwrt_bsp.thermal","get_cpu_temp",{}]},
                     {"jsonrpc":"2.0","id":7,"method":"call","params":["$token","zwrt_mc.device.manager","get_device_info",{}]}
                 ]""".trimIndent()
@@ -189,11 +196,12 @@ class OduApiService(
             }
 
             val netInfo = responses.find { it.id == 1 }?.extractPayload<OduNetInfoPayload>(json)
-                ?: throw IOException("Gagal mengekstrak netinfo dari router")
+                ?: throw IOException(text(R.string.api_netinfo_missing, "Could not read netinfo from the router."))
 
             val routerStatus = if (isAuth) responses.find { it.id == 2 }?.extractPayload<OduRouterStatusPayload>(json) else null
             val traffic = if (isAuth) responses.find { it.id == 3 }?.extractPayload<OduTrafficPayload>(json) else null
             val simInfo = if (isAuth) responses.find { it.id == 4 }?.extractPayload<OduSimInfoPayload>(json) else null
+            val userListNum = if (isAuth) responses.find { it.id == 5 }?.extractPayload<OduUserListNumPayload>(json) else null
             val thermal = if (isAuth) responses.find { it.id == 6 }?.extractPayload<OduThermalPayload>(json) else null
             val deviceInfo = if (isAuth) responses.find { it.id == 7 }?.extractPayload<OduDeviceInfoPayload>(json) else null
 
@@ -202,7 +210,7 @@ class OduApiService(
                 routerStatus = routerStatus,
                 traffic = traffic,
                 simInfo = simInfo,
-                userListNum = null,
+                userListNum = userListNum,
                 thermal = thermal,
                 deviceInfo = deviceInfo,
                 isLoggedIn = isAuth
@@ -246,7 +254,7 @@ class OduApiService(
                 throw IOException("HTTP error ${response.code}")
             }
             if (bodyString.isBlank()) {
-                throw IOException("Respons router kosong")
+                throw IOException(text(R.string.api_empty_response, "The router returned an empty response."))
             }
             return bodyString
         }
@@ -266,7 +274,7 @@ class OduApiService(
             val loginRes = login(cleanHost, creds.username, creds.password)
             if (loginRes.isFailure) {
                 return@withContext Result.failure(
-                    loginRes.exceptionOrNull() ?: IOException("Autentikasi router diperlukan untuk perintah ini")
+                    loginRes.exceptionOrNull() ?: IOException(text(R.string.api_auth_required, "This command needs a router login."))
                 )
             }
         }
@@ -278,7 +286,7 @@ class OduApiService(
                 val payload = """[{"jsonrpc":"2.0","id":1,"method":"call","params":["$sessionToken","$service","$method",$paramsJson]}]"""
                 val respStr = executeRpc(cleanHost, tag, payload, timestamp)
                 val respList = json.decodeFromString<List<UbusResponse>>(respStr)
-                val resp = respList.firstOrNull() ?: throw IOException("Respons router kosong")
+                val resp = respList.firstOrNull() ?: throw IOException(text(R.string.api_empty_response, "The router returned an empty response."))
 
                 val errStr = resp.error?.toString() ?: ""
                 if (errStr.contains("-32002")) {
@@ -289,7 +297,7 @@ class OduApiService(
 
                 val resultCode = resp.result?.firstOrNull()?.toString()?.toIntOrNull() ?: 0
                 if (resultCode != 0) {
-                    throw IOException("Router menolak konfigurasi (kode respons: $resultCode)")
+                    throw IOException(text(R.string.api_config_rejected, "The router rejected the change (response code $resultCode).", resultCode.toString()))
                 }
                 true
             }
@@ -302,7 +310,7 @@ class OduApiService(
             }
         }
 
-        Result.failure(lastException ?: IOException("Gagal mengeksekusi $method"))
+        Result.failure(lastException ?: IOException(text(R.string.api_command_failed, "Could not run the command.", method)))
     }
 
     suspend fun fetchNetInfo(): Result<OduNetInfoPayload> = withContext(Dispatchers.IO) {

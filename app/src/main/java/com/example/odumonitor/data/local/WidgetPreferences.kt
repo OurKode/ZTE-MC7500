@@ -3,6 +3,19 @@ package com.example.odumonitor.data.local
 import android.content.Context
 import android.content.SharedPreferences
 
+enum class RetroSkin(val label: String) {
+    CREAM("Cream"),
+    CHARCOAL("Charcoal")
+}
+
+data class AppearanceConfig(
+    val skin: RetroSkin = RetroSkin.CREAM,
+    val showTrafficChart: Boolean = true,
+    val show5gChart: Boolean = true,
+    val show4gChart: Boolean = true,
+    val showCarrierAggregationCard: Boolean = true
+)
+
 data class WidgetConfig(
     val show5g: Boolean = true,
     val show4g: Boolean = true,
@@ -43,6 +56,16 @@ class WidgetPreferences(context: Context) {
 
     companion object {
         private const val PREF_NAME = "widget_preferences"
+
+        // Appearance Configuration Keys
+        private const val KEY_THEME_MODE = "app_theme_mode"
+        private const val KEY_RETRO_SKIN = "retro_skin"
+        private const val KEY_SHOW_TRAFFIC_CHART = "show_traffic_chart"
+        private const val KEY_SHOW_5G_CHART = "show_5g_chart"
+        private const val KEY_SHOW_4G_CHART = "show_4g_chart"
+        private const val KEY_SHOW_CA_CARD = "show_ca_card"
+
+        // Homescreen Widget Keys
         private const val KEY_SHOW_5G = "show_5g"
         private const val KEY_SHOW_4G = "show_4g"
         private const val KEY_SHOW_PROVIDER_STATUS = "show_provider_status"
@@ -74,6 +97,35 @@ class WidgetPreferences(context: Context) {
         private const val KEY_CUSTOM_5G_BANDS = "ui_custom_5g_bands"
     }
 
+    fun getAppearanceConfig(): AppearanceConfig {
+        // Legacy key: earlier builds stored SYSTEM/DARK/LIGHT. The two-skin model
+        // keeps a deliberate DARK choice as Charcoal and drops the rest, so nobody
+        // is silently flipped out of the skin they picked.
+        val legacy = prefs.getString(KEY_THEME_MODE, null)
+        val migrated = if (legacy == "DARK") RetroSkin.CHARCOAL else RetroSkin.CREAM
+        val skinRaw = prefs.getString(KEY_RETRO_SKIN, migrated.name) ?: migrated.name
+        val skin = runCatching { RetroSkin.valueOf(skinRaw) }.getOrDefault(migrated)
+
+        return AppearanceConfig(
+            skin = skin,
+            showTrafficChart = prefs.getBoolean(KEY_SHOW_TRAFFIC_CHART, true),
+            show5gChart = prefs.getBoolean(KEY_SHOW_5G_CHART, true),
+            show4gChart = prefs.getBoolean(KEY_SHOW_4G_CHART, true),
+            showCarrierAggregationCard = prefs.getBoolean(KEY_SHOW_CA_CARD, true)
+        )
+    }
+
+    fun saveAppearanceConfig(config: AppearanceConfig) {
+        prefs.edit().apply {
+            putString(KEY_RETRO_SKIN, config.skin.name)
+            putBoolean(KEY_SHOW_TRAFFIC_CHART, config.showTrafficChart)
+            putBoolean(KEY_SHOW_5G_CHART, config.show5gChart)
+            putBoolean(KEY_SHOW_4G_CHART, config.show4gChart)
+            putBoolean(KEY_SHOW_CA_CARD, config.showCarrierAggregationCard)
+            apply()
+        }
+    }
+
     fun getUiPreferences(): UiPreferences {
         val raw4g = prefs.getString(KEY_CUSTOM_4G_BANDS, "1,3,8,40") ?: "1,3,8,40"
         val raw5g = prefs.getString(KEY_CUSTOM_5G_BANDS, "1,3,28,40,78") ?: "1,3,28,40,78"
@@ -98,8 +150,8 @@ class WidgetPreferences(context: Context) {
             putString(KEY_SELECTED_5G_METRIC, uiPrefs.selected5gMetric)
             putString(KEY_SELECTED_4G_METRIC, uiPrefs.selected4gMetric)
             putInt(KEY_LAST_SELECTED_TAB, uiPrefs.lastSelectedTab)
-            putString(KEY_CUSTOM_4G_BANDS, uiPrefs.custom4gBands.sorted().joinToString(","))
-            putString(KEY_CUSTOM_5G_BANDS, uiPrefs.custom5gBands.sorted().joinToString(","))
+            putString(KEY_CUSTOM_4G_BANDS, uiPrefs.custom4gBands.joinToString(","))
+            putString(KEY_CUSTOM_5G_BANDS, uiPrefs.custom5gBands.joinToString(","))
             apply()
         }
     }

@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.ServiceCompat
 import androidx.glance.appwidget.updateAll
+import com.example.odumonitor.R
 import com.example.odumonitor.data.local.WidgetPreferences
 import com.example.odumonitor.data.model.OduSignalState
 import com.example.odumonitor.data.repository.OduRepository
@@ -97,7 +98,7 @@ class OduMonitorService : Service() {
             if (config.notifyOduOffline) {
                 if (prev.isConnected && !newState.isConnected) {
                     notificationManager.sendOduOfflineAlert(
-                        newState.errorMessage ?: "Koneksi ke router ZTE terputus"
+                        newState.errorMessage ?: getString(R.string.service_connection_lost)
                     )
                 } else if (!prev.isConnected && newState.isConnected) {
                     notificationManager.sendOduOnlineAlert(newState.provider, newState.connectionType)

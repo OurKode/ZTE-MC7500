@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sub-tabs -->
+    <string name="settings_tab_router">Router</string>
+    <string name="settings_tab_display">Display</string>
+    <string name="settings_tab_widget">Widget</string>
+    <string name="settings_tab_notifications">Notifications</string>
+
+    <!-- Router sub-tab -->
+    <string name="settings_router_credentials_title">Router credentials</string>
+    <string name="settings_router_credentials_desc">Login unlocks quota, real-time throughput, and WAN status</string>
+    <string name="settings_auto_login">Auto login</string>
+    <string name="settings_router_host">Router host or URL</string>
+    <string name="settings_username">Username</string>
+    <string name="settings_password">Web GUI password</string>
+    <string name="settings_show_password">Show password</string>
+    <string name="settings_authenticating">Authenticating\u2026</string>
+    <string name="settings_save_and_test_login">Save and test login</string>
+
+    <!-- Display sub-tab -->
+    <string name="settings_appearance_title">Appearance</string>
+    <string name="settings_appearance_desc">Skin and chart elements</string>
+    <string name="settings_skin_label">Skin</string>
+    <string name="settings_skin_cream">Cream</string>
+    <string name="settings_skin_charcoal">Charcoal</string>
+    <string name="settings_chart_elements_title">Chart elements</string>
+    <string name="settings_chart_traffic">Traffic chart (download and upload)</string>
+    <string name="settings_chart_5g">5G NR signal chart</string>
+    <string name="settings_chart_4g">4G LTE signal chart</string>
+    <string name="settings_modules_title">Additional modules</string>
+    <string name="settings_ca_card">Carrier aggregation (CA) card</string>
+
+    <!-- Widget sub-tab -->
+    <string name="settings_widget_title">Home screen widget</string>
+    <string name="settings_widget_desc">Choose the metrics shown on the 2x2 and 4x2 widgets</string>
+    <string name="settings_widget_show_5g">Show 5G signal</string>
+    <string name="settings_widget_show_4g">Show 4G LTE signal</string>
+    <string name="settings_widget_show_provider">Provider and connection status</string>
+    <string name="settings_widget_show_pci">Transmitter ID (PCI and Cell ID)</string>
+    <string name="settings_widget_show_band">Frequency band info</string>
+    <string name="settings_widget_show_sinr">Signal quality (SINR and RSRQ)</string>
+    <string name="settings_widget_show_timestamp">Last update time</string>
+    <string name="settings_sync_interval_title">Background sync interval</string>
+    <string name="settings_interval_15">15 minutes</string>
+    <string name="settings_interval_30">30 minutes</string>
+    <string name="settings_interval_60">1 hour</string>
+    <string name="settings_interval_180">3 hours</string>
+    <string name="settings_interval_360">6 hours</string>
+    <string name="settings_interval_manual">Manual</string>
+
+    <!-- Notifications sub-tab -->
+    <string name="settings_notifications_title">Background service and alerts</string>
+    <string name="settings_notifications_desc">Detect network changes in real time and notify while the app is closed</string>
+    <string name="settings_notif_service">Active monitoring service (foreground)</string>
+    <string name="settings_notif_band">Band change alerts (4G / 5G)</string>
+    <string name="settings_notif_wan_ip">WAN IP address change alerts</string>
+    <string name="settings_notif_offline">ODU offline alerts</string>
+    <string name="settings_retention_title">Chart history retention (SQLite)</string>
+    <string name="settings_retention_desc">How long chart samples are kept, from 1m up to 24h</string>
+    <string name="settings_retention_24h">24 hours</string>
+    <string name="settings_retention_week">1 week</string>
+    <string name="settings_retention_month">1 month</string>
+    <string name="settings_retention_year">1 year</string>
+    <string name="settings_retention_manual">Manual</string>
+    <string name="settings_clear_history">Clear all chart history</string>
+
+    <!-- Footer -->
+    <string name="settings_footer_version">ZTE ODU Monitor v%1$s (build %2$s)</string>
+</resources>

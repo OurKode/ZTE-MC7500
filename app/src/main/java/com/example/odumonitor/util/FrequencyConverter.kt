@@ -96,9 +96,9 @@ object FrequencyConverter {
         val minutes = (seconds % 3600) / 60
         val secs = seconds % 60
         return when {
-            days > 0 -> "${days}h ${hours}j ${minutes}m"
-            hours > 0 -> "${hours}j ${minutes}m"
-            else -> "${minutes}m ${secs}d"
+            days > 0 -> "${days}d ${hours}h ${minutes}m"
+            hours > 0 -> "${hours}h ${minutes}m"
+            else -> "${minutes}m ${secs}s"
         }
     }
 

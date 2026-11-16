@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Status plate -->
+    <string name="status_link_lost">LINK LOST</string>
+    <string name="status_link_lost_detail">Cannot reach the ZTE MC7500. Check the Wi-Fi or LAN connection to the router.</string>
+    <string name="status_refresh">REFRESH %1$s</string>
+    <string name="action_contacting">Contacting\u2026</string>
+    <string name="action_retry">Try again</string>
+    <string name="action_router_ip">Check router IP</string>
+    <string name="action_refresh">Refresh telemetry</string>
+    <string name="header_connected">LINK OK  %1$s</string>
+    <string name="header_disconnected">LINK DOWN  %1$s</string>
+
+    <!-- Throughput plate -->
+    <string name="traffic_title">THROUGHPUT &amp; GATEWAY</string>
+    <string name="traffic_download">DOWNLOAD</string>
+    <string name="traffic_upload">UPLOAD</string>
+    <string name="traffic_state_offline">OFFLINE</string>
+    <string name="traffic_state_admin">ADMIN</string>
+    <string name="traffic_state_guest">GUEST RF</string>
+
+    <!-- Metric grid -->
+    <string name="metric_wan_ip">WAN IP</string>
+    <string name="metric_sim_no">SIM NO</string>
+    <string name="metric_cpu_temp">CPU TEMP</string>
+    <string name="unit_celsius">%1$s &#176;C</string>
+    <string name="metric_today">TODAY</string>
+    <string name="metric_month">MONTH</string>
+    <string name="metric_uptime">UPTIME</string>
+    <string name="metric_session">SESSION</string>
+    <string name="metric_err_drop">ERR/DROP</string>
+
+    <!-- Charts -->
+    <string name="chart_traffic_title">TRAFFIC %1$s</string>
+    <string name="chart_average_peak">AVG %1$s  PEAK %2$s</string>
+    <string name="chart_scale">SCALE %1$s..%2$s</string>
+    <string name="chart_paused_signal">PAUSED, LINK DOWN</string>
+    <string name="chart_paused_traffic">PAUSED, LINK DOWN</string>
+    <string name="chart_collecting">COLLECTING SAMPLES</string>
+    <string name="chart_collecting_samples">COLLECTING SAMPLES</string>
+    <string name="chart_min_avg_max">MIN %1$s  AVG %2$s  MAX %3$s</string>
+
+    <!-- Radio tech plates -->
+    <string name="tech_5g">5G NR</string>
+    <string name="tech_4g">4G LTE</string>
+    <string name="tech_rsrp">RSRP</string>
+    <string name="tech_sinr">SINR</string>
+    <string name="tech_rsrq">RSRQ</string>
+    <string name="tech_pci">PCI</string>
+    <string name="tech_cell_id">CELL ID</string>
+    <string name="tech_arfcn">ARFCN</string>
+    <string name="tech_earfcn">EARFCN</string>
+    <string name="tech_no_signal">NO SIGNAL</string>
+    <string name="tech_dbm">dBm</string>
+    <string name="tech_db">dB</string>
+
+    <!-- Carrier aggregation -->
+    <string name="ca_title">CARRIER AGGREGATION</string>
+    <string name="ca_active">ACTIVE</string>
+    <string name="ca_inactive">INACTIVE</string>
+    <string name="ca_neighbor_cells">NEIGHBOR CELLS</string>
+
+    <!-- Navigation -->
+    <string name="nav_monitor">Monitor</string>
+    <string name="nav_radio">Radio</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- ViewModel status messages -->
+    <string name="vm_login_success">Signed in. Session %1$s</string>
+    <string name="vm_login_failed">Failed: %1$s</string>
+    <string name="vm_applying">Applying %1$s\u2026</string>
+    <string name="vm_applied">%1$s applied. Waiting for the modem to resync.</string>
+    <string name="vm_apply_failed">Could not apply %1$s: %2$s</string>
+    <string name="vm_action_network_mode">network mode (%1$s)</string>
+    <string name="vm_action_lock_4g_band">4G band lock (%1$s)</string>
+    <string name="vm_action_lock_5g_band">5G band lock (%1$s)</string>
+    <string name="vm_action_lock_4g_cell">4G cell lock, PCI %1$d on EARFCN %2$d</string>
+    <string name="vm_action_unlock_4g_cell">4G cell unlock</string>
+    <string name="vm_action_lock_5g_cell">5G cell lock, PCI %1$d on ARFCN %2$d, band n%3$d</string>
+    <string name="vm_action_unlock_5g_cell">5G cell unlock</string>
+
+    <!-- Widgets -->
+    <string name="widget_odu_offline">ODU OFFLINE</string>
+    <string name="widget_odu_unreachable">ODU not reachable</string>
+    <string name="widget_check_link">Check the Wi-Fi or LAN link to the router.</string>
+    <string name="widget_link_lost">Link to the ODU lost</string>
+    <string name="widget_link_lost_detail">Make sure this device is on the router\'s Wi-Fi or LAN.</string>
+    <string name="widget_standby">STANDBY</string>
+    <string name="widget_snr">SNR %1$s dB</string>
+    <string name="widget_rsrq">RSRQ %1$s dB</string>
+    <string name="widget_pci">PCI %1$s</string>
+    <string name="widget_5g">5G NR</string>
+    <string name="widget_4g">4G LTE</string>
+    <string name="widget_5g_band">5G %1$s</string>
+    <string name="widget_4g_band">4G %1$s</string>
+
+    <!-- Network layer messages -->
+    <string name="api_password_missing">No router password configured. Set one in Settings.</string>
+    <string name="api_salt_failed">Could not read the login salt from the router.</string>
+    <string name="api_salt_empty">The router did not return zte_web_sault.</string>
+    <string name="api_login_parse_failed">Could not parse the router login response.</string>
+    <string name="api_netinfo_missing">Could not read netinfo from the router.</string>
+    <string name="api_auth_required">This command needs a router login.</string>
+    <string name="api_command_failed">Could not run %1$s.</string>
+    <string name="api_bad_credentials">Wrong credentials (router response code %1$s).</string>
+    <string name="api_empty_response">The router returned an empty response.</string>
+    <string name="api_config_rejected">The router rejected the change (response code %1$s).</string>
+    <string name="repo_unreachable">Network unreachable</string>
+    <string name="repo_disconnected">Disconnected</string>
+    <string name="repo_offline_provider">ODU offline</string>
+    <string name="repo_link_error">Cannot reach the ODU at %1$s. Check the Wi-Fi or LAN link to the router. (%2$s)</string>
+
+    <!-- Notification channels and alerts -->
+    <string name="notif_channel_monitor_name">ODU monitoring</string>
+    <string name="notif_channel_monitor_desc">Live connection state and throughput telemetry.</string>
+    <string name="notif_channel_alerts_name">ODU network alerts</string>
+    <string name="notif_channel_alerts_desc">Alerts for band changes, WAN IP changes and lost connections.</string>
+    <string name="notif_online_title">ODU online: %1$s (%2$s)</string>
+    <string name="notif_connecting">ODU offline, reconnecting\u2026</string>
+    <string name="notif_band_changed_title">%1$s band changed</string>
+    <string name="notif_band_changed_body">Now on %1$s, previously %2$s</string>
+    <string name="notif_wan_changed_title">Router WAN IP changed</string>
+    <string name="notif_wan_changed_body">New IP %1$s, previously %2$s</string>
+    <string name="notif_lost_title">ODU link lost</string>
+    <string name="notif_lost_body">The router did not respond: %1$s</string>
+    <string name="notif_back_online_title">ODU back online</string>
+    <string name="notif_back_online_body">Connected to %1$s (%2$s)</string>
+    <string name="service_connection_lost">Connection to the ODU was lost</string>
+
+</resources>

@@ -48,20 +48,20 @@ class OduNotificationManager(private val context: Context) {
             // Channel 1: Ongoing low-priority service indicator
             val monitorChannel = NotificationChannel(
                 CHANNEL_ID_MONITOR,
-                "Layanan Pemantauan ODU (Aktif)",
+                context.getString(R.string.notif_channel_monitor_name),
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Status koneksi dan telemetri throughput ZTE MC7500 secara real-time"
+                description = context.getString(R.string.notif_channel_monitor_desc)
                 setShowBadge(false)
             }
 
             // Channel 2: High priority alerts (Band change, WAN IP change, ODU offline)
             val alertsChannel = NotificationChannel(
                 CHANNEL_ID_ALERTS,
-                "Peringatan Jaringan ODU",
+                context.getString(R.string.notif_channel_alerts_name),
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Notifikasi peringatan saat Band berubah, WAN IP berganti, atau koneksi terputus"
+                description = context.getString(R.string.notif_channel_alerts_desc)
                 enableVibration(true)
                 setShowBadge(true)
             }
@@ -83,9 +83,9 @@ class OduNotificationManager(private val context: Context) {
         )
 
         val title = if (state.isConnected) {
-            "ODU Online: ${state.provider} (${state.connectionType})"
+            context.getString(R.string.notif_online_title, state.provider, state.connectionType)
         } else {
-            "ODU Terputus: Mencoba menghubungkan..."
+            context.getString(R.string.notif_connecting)
         }
 
         val text = if (state.isConnected) {
@@ -97,7 +97,7 @@ class OduNotificationManager(private val context: Context) {
             val bandText = if (state.nrBand != "-") state.nrBand else state.lteBand
             "$speedText • Band $bandText"
         } else {
-            state.errorMessage ?: "Router ZTE 192.168.254.1 tidak dapat dijangkau"
+            state.errorMessage ?: context.getString(R.string.repo_unreachable)
         }
 
         return NotificationCompat.Builder(context, CHANNEL_ID_MONITOR)
@@ -125,8 +125,8 @@ class OduNotificationManager(private val context: Context) {
 
         val tech = if (is5g) "5G NR" else "4G LTE"
         val notification = NotificationCompat.Builder(context, CHANNEL_ID_ALERTS)
-            .setContentTitle("Perubahan Band $tech Terdeteksi")
-            .setContentText("Beralih ke Band $newBand (sebelumnya $oldBand)")
+            .setContentTitle(context.getString(R.string.notif_band_changed_title, tech))
+            .setContentText(context.getString(R.string.notif_band_changed_body, newBand, oldBand))
             .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
@@ -149,8 +149,8 @@ class OduNotificationManager(private val context: Context) {
         )
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID_ALERTS)
-            .setContentTitle("Alamat WAN IP Router Berganti")
-            .setContentText("IP Baru: $newIp (sebelumnya $oldIp)")
+            .setContentTitle(context.getString(R.string.notif_wan_changed_title))
+            .setContentText(context.getString(R.string.notif_wan_changed_body, newIp, oldIp))
             .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
@@ -173,8 +173,8 @@ class OduNotificationManager(private val context: Context) {
         )
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID_ALERTS)
-            .setContentTitle("Peringatan: ODU ZTE Terputus")
-            .setContentText("Router tidak merespons: $reason")
+            .setContentTitle(context.getString(R.string.notif_lost_title))
+            .setContentText(context.getString(R.string.notif_lost_body, reason))
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
@@ -197,8 +197,8 @@ class OduNotificationManager(private val context: Context) {
         )
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID_ALERTS)
-            .setContentTitle("ODU ZTE Kembali Online")
-            .setContentText("Terhubung ke jaringan $provider ($type)")
+            .setContentTitle(context.getString(R.string.notif_back_online_title))
+            .setContentText(context.getString(R.string.notif_back_online_body, provider, type))
             .setSmallIcon(android.R.drawable.stat_sys_upload_done)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)

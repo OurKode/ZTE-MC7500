@@ -87,10 +87,22 @@ data class OduRouterStatusPayload(
 
 @Serializable
 data class OduTrafficPayload(
+    @SerialName("real_time") val realTime: Long? = null,
     @SerialName("real_tx_speed") val realTxSpeed: Long? = null,
     @SerialName("real_rx_speed") val realRxSpeed: Long? = null,
+    @SerialName("real_max_tx_speed") val realMaxTxSpeed: Long? = null,
+    @SerialName("real_max_rx_speed") val realMaxRxSpeed: Long? = null,
+    @SerialName("day_time") val dayTime: Long? = null,
     @SerialName("day_rx_bytes") val dayRxBytes: Long? = null,
-    @SerialName("month_rx_bytes") val monthRxBytes: Long? = null
+    @SerialName("day_tx_bytes") val dayTxBytes: Long? = null,
+    @SerialName("day_rx_error_packets") val dayRxErrorPackets: Long? = null,
+    @SerialName("day_tx_error_packets") val dayTxErrorPackets: Long? = null,
+    @SerialName("day_rx_drop_packets") val dayRxDropPackets: Long? = null,
+    @SerialName("day_tx_drop_packets") val dayTxDropPackets: Long? = null,
+    @SerialName("month_rx_bytes") val monthRxBytes: Long? = null,
+    @SerialName("month_tx_bytes") val monthTxBytes: Long? = null,
+    @SerialName("total_rx_bytes") val totalRxBytes: Long? = null,
+    @SerialName("total_tx_bytes") val totalTxBytes: Long? = null
 )
 
 @Serializable
@@ -187,5 +199,18 @@ data class OduSignalState(
     val netSelect: String? = null,
     val lteBandLock: String? = null,
     val lockLteCell: String? = null,
-    val lockNrCell: String? = null
+    val lockNrCell: String? = null,
+
+    // Traffic counters (field names verified live on MC7500 via zwrt_data/get_wwandst)
+    val dayTxBytes: Long = 0L,
+    val monthTxBytes: Long = 0L,
+    val totalRxBytes: Long = 0L,
+    val totalTxBytes: Long = 0L,
+    val dayRxErrorPackets: Long = 0L,
+    val dayTxErrorPackets: Long = 0L,
+    val dayRxDropPackets: Long = 0L,
+    val dayTxDropPackets: Long = 0L,
+    val connectionDurationSeconds: Long = 0L,
+    val peakDownloadSpeedBps: Long = 0L,
+    val peakUploadSpeedBps: Long = 0L
 )

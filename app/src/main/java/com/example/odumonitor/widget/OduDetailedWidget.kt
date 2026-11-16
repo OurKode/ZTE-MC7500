@@ -2,6 +2,7 @@ package com.example.odumonitor.widget
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
@@ -23,11 +24,13 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import com.example.odumonitor.MainActivity
+import com.example.odumonitor.R
 import com.example.odumonitor.data.local.WidgetConfig
 import com.example.odumonitor.data.local.WidgetPreferences
 import com.example.odumonitor.data.model.OduSignalState
 import com.example.odumonitor.data.repository.OduRepository
-import com.example.odumonitor.ui.theme.*
+import com.example.odumonitor.ui.theme.getRsrpColor
+import com.example.odumonitor.ui.theme.getSinrColor
 import com.example.odumonitor.worker.WidgetUpdateManager
 import java.text.SimpleDateFormat
 import java.util.*
@@ -67,22 +70,11 @@ class RefreshDetailedWidgetAction : ActionCallback {
 
 @Composable
 fun DetailedWidgetContent(signal: OduSignalState, config: WidgetConfig, launchIntent: android.content.Intent) {
-    val statusBgColor = if (signal.isConnected) {
-        GlanceTheme.colors.primaryContainer
-    } else {
-        GlanceTheme.colors.errorContainer
-    }
-    val statusTextColor = if (signal.isConnected) {
-        GlanceTheme.colors.onPrimaryContainer
-    } else {
-        GlanceTheme.colors.onErrorContainer
-    }
-
     Box(
         modifier = GlanceModifier
             .fillMaxSize()
-            .background(GlanceTheme.colors.surface)
-            .cornerRadius(16.dp)
+            .background(WidgetPalette.shell)
+            .cornerRadius(3.dp)
             .padding(12.dp)
             .clickable(actionStartActivity(launchIntent))
     ) {
@@ -94,16 +86,23 @@ fun DetailedWidgetContent(signal: OduSignalState, config: WidgetConfig, launchIn
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (config.showProviderStatus) {
-                    Box(
-                        modifier = GlanceModifier
-                            .background(statusBgColor)
-                            .cornerRadius(6.dp)
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = GlanceModifier
+                                .width(6.dp)
+                                .height(6.dp)
+                                .background(if (signal.isConnected) WidgetPalette.good else WidgetPalette.bad)
+                                .cornerRadius(3.dp)
+                        ) {}
+                        Spacer(modifier = GlanceModifier.width(6.dp))
                         Text(
-                            text = if (signal.isConnected) "${signal.connectionType} • ${signal.provider}" else "ODU TERPUTUS (OFFLINE)",
+                            text = if (signal.isConnected) {
+                                "${signal.connectionType}  ${signal.provider}"
+                            } else {
+                                stringResource(R.string.widget_odu_offline)
+                            },
                             style = TextStyle(
-                                color = statusTextColor,
+                                color = if (signal.isConnected) WidgetPalette.ink else WidgetPalette.bad,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -116,7 +115,7 @@ fun DetailedWidgetContent(signal: OduSignalState, config: WidgetConfig, launchIn
                 if (config.showTimestamp) {
                     Text(
                         text = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(signal.lastUpdated)),
-                        style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 10.sp)
+                        style = TextStyle(color = WidgetPalette.ink2, fontSize = 10.sp)
                     )
                 }
 
@@ -124,14 +123,14 @@ fun DetailedWidgetContent(signal: OduSignalState, config: WidgetConfig, launchIn
 
                 Box(
                     modifier = GlanceModifier
-                        .cornerRadius(6.dp)
+                        .cornerRadius(2.dp)
                         .padding(6.dp)
                         .clickable(actionRunCallback<RefreshDetailedWidgetAction>())
                 ) {
                     Text(
-                        text = "↻",
+                        text = "\u21bb",
                         style = TextStyle(
-                            color = GlanceTheme.colors.primary,
+                            color = WidgetPalette.accent,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -146,25 +145,25 @@ fun DetailedWidgetContent(signal: OduSignalState, config: WidgetConfig, launchIn
                     modifier = GlanceModifier
                         .fillMaxWidth()
                         .defaultWeight()
-                        .background(GlanceTheme.colors.errorContainer)
-                        .cornerRadius(12.dp)
+                        .background(WidgetPalette.inset)
+                        .cornerRadius(3.dp)
                         .padding(12.dp),
                     contentAlignment = Alignment.CenterStart
                 ) {
                     Column {
                         Text(
-                            text = "Koneksi ke ODU Terputus",
+                            text = stringResource(R.string.widget_link_lost),
                             style = TextStyle(
-                                color = GlanceTheme.colors.onErrorContainer,
+                                color = WidgetPalette.bad,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         )
                         Spacer(modifier = GlanceModifier.height(2.dp))
                         Text(
-                            text = signal.errorMessage ?: "Pastikan perangkat terhubung ke jaringan Wi-Fi/LAN router ODU.",
+                            text = signal.errorMessage ?: stringResource(R.string.widget_link_lost_detail),
                             style = TextStyle(
-                                color = GlanceTheme.colors.onErrorContainer,
+                                color = WidgetPalette.ink2,
                                 fontSize = 10.sp
                             ),
                             maxLines = 2
@@ -181,21 +180,21 @@ fun DetailedWidgetContent(signal: OduSignalState, config: WidgetConfig, launchIn
                             modifier = GlanceModifier
                                 .defaultWeight()
                                 .fillMaxHeight()
-                                .background(GlanceTheme.colors.surfaceVariant)
-                                .cornerRadius(12.dp)
+                                .background(WidgetPalette.plate)
+                                .cornerRadius(3.dp)
                                 .padding(8.dp)
                         ) {
                             Column {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        text = "5G NR",
-                                        style = TextStyle(color = GlanceTheme.colors.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        text = stringResource(R.string.widget_5g),
+                                        style = TextStyle(color = WidgetPalette.accent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     )
                                     Spacer(modifier = GlanceModifier.defaultWeight())
                                     if (config.showBandInfo && signal.nrBand != "-") {
                                         Text(
                                             text = signal.nrBand,
-                                            style = TextStyle(color = GlanceTheme.colors.primary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                            style = TextStyle(color = WidgetPalette.ink2, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                         )
                                     }
                                 }
@@ -206,31 +205,42 @@ fun DetailedWidgetContent(signal: OduSignalState, config: WidgetConfig, launchIn
                                         color = if (has5g) ColorProvider(
                                             day = getRsrpColor(signal.nrRsrp, isDark = false),
                                             night = getRsrpColor(signal.nrRsrp, isDark = true)
-                                        ) else GlanceTheme.colors.onSurfaceVariant,
+                                        ) else WidgetPalette.ink2,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold
                                     )
                                 )
                                 if (config.showSinrRsrq) {
                                     Text(
-                                        text = if (has5g) "SNR: ${signal.nrSinr} dB" else "SNR: --",
+                                        text = if (has5g) {
+                                            stringResource(R.string.widget_snr, signal.nrSinr.toString())
+                                        } else {
+                                            stringResource(R.string.widget_standby)
+                                        },
                                         style = TextStyle(
                                             color = if (has5g) ColorProvider(
                                                 day = getSinrColor(signal.nrSinr, isDark = false),
                                                 night = getSinrColor(signal.nrSinr, isDark = true)
-                                            ) else GlanceTheme.colors.onSurfaceVariant,
+                                            ) else WidgetPalette.ink2,
                                             fontSize = 11.sp
                                         )
                                     )
                                     Text(
-                                        text = if (has5g) "RSRQ: ${signal.nrRsrq} dB" else "RSRQ: --",
-                                        style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 10.sp)
+                                        text = if (has5g) {
+                                            stringResource(R.string.widget_rsrq, signal.nrRsrq.toString())
+                                        } else {
+                                            stringResource(R.string.widget_standby)
+                                        },
+                                        style = TextStyle(color = WidgetPalette.ink2, fontSize = 10.sp)
                                     )
                                 }
                                 if (config.showPciTower) {
                                     Text(
-                                        text = "PCI: ${if (signal.nrPci > 0) signal.nrPci else "-"}",
-                                        style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 9.sp)
+                                        text = stringResource(
+                                            R.string.widget_pci,
+                                            if (signal.nrPci > 0) signal.nrPci.toString() else "-"
+                                        ),
+                                        style = TextStyle(color = WidgetPalette.ink2, fontSize = 9.sp)
                                     )
                                 }
                             }
@@ -247,21 +257,21 @@ fun DetailedWidgetContent(signal: OduSignalState, config: WidgetConfig, launchIn
                             modifier = GlanceModifier
                                 .defaultWeight()
                                 .fillMaxHeight()
-                                .background(GlanceTheme.colors.surfaceVariant)
-                                .cornerRadius(12.dp)
+                                .background(WidgetPalette.plate)
+                                .cornerRadius(3.dp)
                                 .padding(8.dp)
                         ) {
                             Column {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        text = "4G LTE",
-                                        style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        text = stringResource(R.string.widget_4g),
+                                        style = TextStyle(color = WidgetPalette.ink2, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                     )
                                     Spacer(modifier = GlanceModifier.defaultWeight())
                                     if (config.showBandInfo && signal.lteBand != "-") {
                                         Text(
                                             text = signal.lteBand,
-                                            style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                            style = TextStyle(color = WidgetPalette.ink2, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                         )
                                     }
                                 }
@@ -272,31 +282,42 @@ fun DetailedWidgetContent(signal: OduSignalState, config: WidgetConfig, launchIn
                                         color = if (has4g) ColorProvider(
                                             day = getRsrpColor(signal.lteRsrp, isDark = false),
                                             night = getRsrpColor(signal.lteRsrp, isDark = true)
-                                        ) else GlanceTheme.colors.onSurfaceVariant,
+                                        ) else WidgetPalette.ink2,
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold
                                     )
                                 )
                                 if (config.showSinrRsrq) {
                                     Text(
-                                        text = if (has4g) "SNR: ${signal.lteSinr} dB" else "SNR: --",
+                                        text = if (has4g) {
+                                            stringResource(R.string.widget_snr, signal.lteSinr.toString())
+                                        } else {
+                                            stringResource(R.string.widget_standby)
+                                        },
                                         style = TextStyle(
                                             color = if (has4g) ColorProvider(
                                                 day = getSinrColor(signal.lteSinr, isDark = false),
                                                 night = getSinrColor(signal.lteSinr, isDark = true)
-                                            ) else GlanceTheme.colors.onSurfaceVariant,
+                                            ) else WidgetPalette.ink2,
                                             fontSize = 11.sp
                                         )
                                     )
                                     Text(
-                                        text = if (has4g) "RSRQ: ${signal.lteRsrq} dB" else "RSRQ: --",
-                                        style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 10.sp)
+                                        text = if (has4g) {
+                                            stringResource(R.string.widget_rsrq, signal.lteRsrq.toString())
+                                        } else {
+                                            stringResource(R.string.widget_standby)
+                                        },
+                                        style = TextStyle(color = WidgetPalette.ink2, fontSize = 10.sp)
                                     )
                                 }
                                 if (config.showPciTower) {
                                     Text(
-                                        text = "PCI: ${if (signal.ltePci > 0) signal.ltePci else "-"}",
-                                        style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 9.sp)
+                                        text = stringResource(
+                                            R.string.widget_pci,
+                                            if (signal.ltePci > 0) signal.ltePci.toString() else "-"
+                                        ),
+                                        style = TextStyle(color = WidgetPalette.ink2, fontSize = 9.sp)
                                     )
                                 }
                             }

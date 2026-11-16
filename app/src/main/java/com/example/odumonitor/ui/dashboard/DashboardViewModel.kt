@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.odumonitor.R
+import com.example.odumonitor.data.local.AppearanceConfig
 import com.example.odumonitor.data.local.ChartTimeRange
 import com.example.odumonitor.data.local.HistoryRetention
 import com.example.odumonitor.data.local.NotificationConfig
@@ -26,9 +28,9 @@ import kotlinx.coroutines.withContext
 data class DashboardUiState(
     val signalState: OduSignalState = OduSignalState(
         isConnected = false,
-        connectionType = "Terputus",
-        provider = "ODU Terputus (Offline)",
-        errorMessage = "Memeriksa koneksi ke ODU..."
+        connectionType = "Disconnected",
+        provider = "ODU offline",
+        errorMessage = "Checking connection to the ODU..."
     ),
     val signalHistory: List<OduSignalState> = emptyList(),
     val pollingIntervalMs: Long = 3000L,
@@ -40,10 +42,12 @@ data class DashboardUiState(
     val custom5gBands: Set<Int> = setOf(1, 3, 28, 40, 78),
     val historyRetention: HistoryRetention = HistoryRetention.TWENTY_FOUR_HOURS,
     val isRefreshing: Boolean = true,
+    val appearanceConfig: AppearanceConfig = AppearanceConfig(),
     val widgetConfig: WidgetConfig = WidgetConfig(),
     val routerCredentials: RouterCredentials = RouterCredentials(),
     val notificationConfig: NotificationConfig = NotificationConfig(),
     val loginStatusMessage: String? = null,
+    val loginStatusSuccess: Boolean? = null,
     val isTestingLogin: Boolean = false,
     val isExecutingRadioCommand: Boolean = false,
     val radioCommandMessage: String? = null
@@ -67,6 +71,7 @@ class DashboardViewModel(
             custom4gBands = initialUiPrefs.custom4gBands,
             custom5gBands = initialUiPrefs.custom5gBands,
             historyRetention = repository.getHistoryRetention(),
+            appearanceConfig = widgetPrefs.getAppearanceConfig(),
             widgetConfig = widgetPrefs.getWidgetConfig(),
             routerCredentials = widgetPrefs.getRouterCredentials(),
             notificationConfig = widgetPrefs.getNotificationConfig()
@@ -200,6 +205,11 @@ class DashboardViewModel(
         WidgetUpdateManager.scheduleWidgetUpdates(context, config.updateIntervalMinutes)
     }
 
+    fun updateAppearanceConfig(config: AppearanceConfig) {
+        widgetPrefs.saveAppearanceConfig(config)
+        _uiState.value = _uiState.value.copy(appearanceConfig = config)
+    }
+
     fun updateRouterCredentials(creds: RouterCredentials) {
         widgetPrefs.saveRouterCredentials(creds)
         _uiState.value = _uiState.value.copy(routerCredentials = creds)
@@ -211,13 +221,14 @@ class DashboardViewModel(
             _uiState.value = _uiState.value.copy(isTestingLogin = true, loginStatusMessage = null)
             val res = repository.testLogin(creds)
             val msg = if (res.isSuccess) {
-                "Berhasil login! Sesi aktif: ${res.getOrNull()?.take(8)}..."
+                context.getString(R.string.vm_login_success, "${res.getOrNull()?.take(8)}")
             } else {
-                "Gagal: ${res.exceptionOrNull()?.message}"
+                context.getString(R.string.vm_login_failed, res.exceptionOrNull()?.message ?: "unknown error")
             }
             _uiState.value = _uiState.value.copy(
                 isTestingLogin = false,
-                loginStatusMessage = msg
+                loginStatusMessage = msg,
+                loginStatusSuccess = res.isSuccess
             )
             if (res.isSuccess) {
                 updateRouterCredentials(creds)
@@ -239,13 +250,13 @@ class DashboardViewModel(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isExecutingRadioCommand = true,
-                radioCommandMessage = "Menerapkan $actionName..."
+                radioCommandMessage = context.getString(R.string.vm_applying, actionName)
             )
             val res = block()
             val msg = if (res.isSuccess) {
-                "Berhasil menerapkan $actionName. Menunggu modem re-sinkronisasi..."
+                context.getString(R.string.vm_applied, actionName)
             } else {
-                "Gagal menerapkan $actionName: ${res.exceptionOrNull()?.message}"
+                context.getString(R.string.vm_apply_failed, actionName, res.exceptionOrNull()?.message ?: "unknown error")
             }
             _uiState.value = _uiState.value.copy(
                 isExecutingRadioCommand = false,
@@ -260,43 +271,45 @@ class DashboardViewModel(
 
     fun setNetworkSelect(mode: String) {
         val label = com.example.odumonitor.util.FrequencyConverter.formatBearerModeName(mode)
-        executeRadioAction("Mode Jaringan ($label)") {
+        executeRadioAction(context.getString(R.string.vm_action_network_mode, label)) {
             repository.setNetworkSelect(mode)
         }
     }
 
     fun set4gBandLock(maskStr: String, label: String) {
-        executeRadioAction("Kunci Band 4G ($label)") {
+        executeRadioAction(context.getString(R.string.vm_action_lock_4g_band, label)) {
             repository.set4gBandLock(maskStr)
         }
     }
 
     fun set5gBandLock(bandsStr: String, label: String) {
-        executeRadioAction("Kunci Band 5G ($label)") {
+        executeRadioAction(context.getString(R.string.vm_action_lock_5g_band, label)) {
             repository.set5gBandLock(bandsStr)
         }
     }
 
     fun lock4gCell(pci: Int, earfcn: Int) {
-        executeRadioAction("Kunci Sel 4G (PCI $pci, EARFCN $earfcn)") {
+        executeRadioAction(context.getString(R.string.vm_action_lock_4g_cell, pci, earfcn)) {
             repository.lock4gCell(pci, earfcn)
         }
     }
 
     fun unlock4gCell() {
-        executeRadioAction("Buka Kunci Sel 4G") {
+        executeRadioAction(context.getString(R.string.vm_action_unlock_4g_cell)) {
             repository.unlock4gCell()
         }
     }
 
     fun lock5gCell(pci: Int, earfcnOrArfcn: Int, bandNumber: Int) {
-        executeRadioAction("Kunci Sel 5G (PCI $pci, ARFCN $earfcnOrArfcn, n$bandNumber)") {
+        executeRadioAction(
+            context.getString(R.string.vm_action_lock_5g_cell, pci, earfcnOrArfcn, bandNumber)
+        ) {
             repository.lock5gCell(pci, earfcnOrArfcn, bandNumber)
         }
     }
 
     fun unlock5gCell() {
-        executeRadioAction("Buka Kunci Sel 5G") {
+        executeRadioAction(context.getString(R.string.vm_action_unlock_5g_cell)) {
             repository.unlock5gCell()
         }
     }
