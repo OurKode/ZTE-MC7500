@@ -2,7 +2,6 @@ package com.example.odumonitor.widget
 
 import android.content.Context
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
@@ -24,11 +23,9 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import com.example.odumonitor.MainActivity
-import com.example.odumonitor.R
 import com.example.odumonitor.data.local.WidgetConfig
 import com.example.odumonitor.data.local.WidgetPreferences
 import com.example.odumonitor.data.model.OduSignalState
-import com.example.odumonitor.data.repository.OduRepository
 import com.example.odumonitor.ui.theme.getRsrpColor
 import com.example.odumonitor.worker.WidgetUpdateManager
 
@@ -37,23 +34,25 @@ class OduCompactWidgetReceiver : GlanceAppWidgetReceiver() {
 
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
-        val config = WidgetPreferences(context).getWidgetConfig()
+        val config = runCatching { WidgetPreferences(context).getWidgetConfig() }
+            .getOrDefault(WidgetConfig())
         WidgetUpdateManager.scheduleWidgetUpdates(context, config.updateIntervalMinutes)
     }
 }
 
 class OduCompactWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val repository = OduRepository(context)
-        val signalState = repository.fetchCurrentSignalOnce()
-        val config = WidgetPreferences(context).getWidgetConfig()
+        val config = runCatching { WidgetPreferences(context).getWidgetConfig() }
+            .getOrDefault(WidgetConfig())
+        val signal = loadWidgetSignal(context)
+        val text = widgetText(context, signal, config, detailed = false)
         val launchIntent = android.content.Intent(context, MainActivity::class.java).apply {
             flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
 
         provideContent {
             GlanceTheme {
-                CompactWidgetContent(signalState, config, launchIntent)
+                CompactWidgetContent(signal, text, launchIntent)
             }
         }
     }
@@ -66,7 +65,7 @@ class RefreshCompactWidgetAction : ActionCallback {
 }
 
 @Composable
-fun CompactWidgetContent(signal: OduSignalState, config: WidgetConfig, launchIntent: android.content.Intent) {
+fun CompactWidgetContent(signal: OduSignalState, text: WidgetText, launchIntent: android.content.Intent) {
     Box(
         modifier = GlanceModifier
             .fillMaxSize()
@@ -93,7 +92,7 @@ fun CompactWidgetContent(signal: OduSignalState, config: WidgetConfig, launchInt
                     ) {}
                     Spacer(modifier = GlanceModifier.width(6.dp))
                     Text(
-                        text = if (signal.isConnected) signal.connectionType else stringResource(R.string.widget_odu_offline),
+                        text = text.status,
                         style = TextStyle(
                             color = if (signal.isConnected) WidgetPalette.ink else WidgetPalette.bad,
                             fontSize = 9.sp,
@@ -125,7 +124,7 @@ fun CompactWidgetContent(signal: OduSignalState, config: WidgetConfig, launchInt
 
             if (!signal.isConnected) {
                 Text(
-                    text = stringResource(R.string.widget_odu_unreachable),
+                    text = text.offlineHeadline,
                     style = TextStyle(
                         color = WidgetPalette.bad,
                         fontSize = 12.sp,
@@ -133,29 +132,25 @@ fun CompactWidgetContent(signal: OduSignalState, config: WidgetConfig, launchInt
                     )
                 )
                 Text(
-                    text = stringResource(R.string.widget_check_link),
-                    style = TextStyle(color = WidgetPalette.ink2, fontSize = 10.sp)
+                    text = text.offlineDetail,
+                    style = TextStyle(color = WidgetPalette.ink2, fontSize = 10.sp),
+                    maxLines = 2
                 )
             } else {
                 Row(
                     modifier = GlanceModifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (config.show5g) {
-                        val has5g = signal.nrRsrp != 0
+                    text.fiveG?.let { fiveG ->
                         Column(modifier = GlanceModifier.defaultWeight()) {
                             Text(
-                                text = if (config.showBandInfo && signal.nrBand != "-") {
-                                    stringResource(R.string.widget_5g_band, signal.nrBand)
-                                } else {
-                                    stringResource(R.string.widget_5g)
-                                },
+                                text = fiveG.bandedTitle,
                                 style = TextStyle(color = WidgetPalette.accent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             )
                             Text(
-                                text = if (has5g) "${signal.nrRsrp} dBm" else "-- dBm",
+                                text = fiveG.value,
                                 style = TextStyle(
-                                    color = if (has5g) ColorProvider(
+                                    color = if (signal.nrRsrp != 0) ColorProvider(
                                         day = getRsrpColor(signal.nrRsrp, isDark = false),
                                         night = getRsrpColor(signal.nrRsrp, isDark = true)
                                     ) else WidgetPalette.ink2,
@@ -163,38 +158,29 @@ fun CompactWidgetContent(signal: OduSignalState, config: WidgetConfig, launchInt
                                     fontWeight = FontWeight.Bold
                                 )
                             )
-                            if (config.showSinrRsrq) {
+                            fiveG.snr?.let { snr ->
                                 Text(
-                                    text = if (has5g) {
-                                        stringResource(R.string.widget_snr, signal.nrSinr.toString())
-                                    } else {
-                                        stringResource(R.string.widget_standby)
-                                    },
+                                    text = snr,
                                     style = TextStyle(color = WidgetPalette.ink2, fontSize = 9.sp)
                                 )
                             }
                         }
                     }
 
-                    if (config.show5g && config.show4g) {
+                    if (text.fiveG != null && text.fourG != null) {
                         Spacer(modifier = GlanceModifier.width(6.dp))
                     }
 
-                    if (config.show4g) {
-                        val has4g = signal.lteRsrp != 0
+                    text.fourG?.let { fourG ->
                         Column(modifier = GlanceModifier.defaultWeight()) {
                             Text(
-                                text = if (config.showBandInfo && signal.lteBand != "-") {
-                                    stringResource(R.string.widget_4g_band, signal.lteBand)
-                                } else {
-                                    stringResource(R.string.widget_4g)
-                                },
+                                text = fourG.bandedTitle,
                                 style = TextStyle(color = WidgetPalette.ink2, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                             )
                             Text(
-                                text = if (has4g) "${signal.lteRsrp} dBm" else "-- dBm",
+                                text = fourG.value,
                                 style = TextStyle(
-                                    color = if (has4g) ColorProvider(
+                                    color = if (signal.lteRsrp != 0) ColorProvider(
                                         day = getRsrpColor(signal.lteRsrp, isDark = false),
                                         night = getRsrpColor(signal.lteRsrp, isDark = true)
                                     ) else WidgetPalette.ink2,
@@ -202,13 +188,9 @@ fun CompactWidgetContent(signal: OduSignalState, config: WidgetConfig, launchInt
                                     fontWeight = FontWeight.Bold
                                 )
                             )
-                            if (config.showSinrRsrq) {
+                            fourG.snr?.let { snr ->
                                 Text(
-                                    text = if (has4g) {
-                                        stringResource(R.string.widget_snr, signal.lteSinr.toString())
-                                    } else {
-                                        stringResource(R.string.widget_standby)
-                                    },
+                                    text = snr,
                                     style = TextStyle(color = WidgetPalette.ink2, fontSize = 9.sp)
                                 )
                             }

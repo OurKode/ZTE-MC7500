@@ -39,6 +39,18 @@ All notable changes to **ZTE MC7500 ODU Monitor** are documented in this file.
 - **Chart grid switch**: the grid is now always on inside the charts, so the toggle and
   its stored preference were deleted.
 
+### Fixed
+- **Widgets rendered the launcher error layout**: both Glance widgets called
+  `stringResource()` inside their composables. That helper reads Compose UI's
+  `LocalContext`, which the Glance 1.0.0 runtime never provides, so every composition
+  threw and the launcher showed its error box instead of the widget. All widget copy is
+  now resolved in `WidgetText.kt` from the real `Context` before composition, and the
+  composables only place strings they are handed.
+- **A widget can no longer fail as a whole**: the telemetry read is wrapped in
+  `loadWidgetSignal()`, which falls back to a resolved offline state, and widget
+  preferences fall back to defaults, so a database or keystore fault degrades the
+  content instead of replacing the widget with an error box.
+
 ### Security
 - **Router credentials are now encrypted at rest**: the host, username, password and
   login switch moved out of `widget_preferences` into their own file, each value sealed
