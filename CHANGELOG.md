@@ -2,7 +2,7 @@
 
 All notable changes to **ZTE MC7500 ODU Monitor** are documented in this file.
 
-## [Unreleased]
+## [1.4.0] - 2026-11-16
 
 ### Added
 - **Retro field-instrument interface**: cream and charcoal skins, bevelled plates
@@ -60,11 +60,12 @@ All notable changes to **ZTE MC7500 ODU Monitor** are documented in this file.
   right-aligned instead of colliding with the label.
 
 ### Security
-- **Router credentials are now encrypted at rest**: the host, username, password and
-  login switch moved out of `widget_preferences` into their own file, each value sealed
-  with AES-256-GCM under an Android keystore key (random IV per value, authenticated
-  ciphertext). Existing plaintext values are migrated once on first read and then
-  deleted from the old file.
+- **Router credentials are now encrypted at rest**: the host, username and password
+  moved out of `widget_preferences` into their own file, each value sealed with
+  AES-256-GCM under an Android keystore key (random IV per value, authenticated
+  ciphertext). The login switch travels with them as a plain boolean, since it is a
+  setting rather than a secret. Existing plaintext values are migrated once on first
+  read and then deleted from the old file.
 - **Credential storage fails closed**: if the keystore is unavailable the credentials
   stay in memory for that session, the plaintext copy is left untouched rather than
   deleted, and nothing new is written in the clear.
